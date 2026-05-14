@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Java / Gradle
+.gradle/
+build/
+bin/
+*.log
+*.log.*
+
+# IDE
+.vscode/
+.idea/
+.metals/
+.worksheet/
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# Claude
+.claude/
+
+# Test artifacts
+app/src/main/java/ca/uwaterloo/watform/test/catalyst/catalyst-corpus.zip
+app/src/main/java/ca/uwaterloo/watform/test/catalyst/catalyst-corpus
+app/src/main/java/ca/uwaterloo/watform/test/catalyst/timeout
+app/src/main/java/ca/uwaterloo/watform/test/catalyst/problemFiles
+app/src/main/java/ca/uwaterloo/watform/nancy-list.md

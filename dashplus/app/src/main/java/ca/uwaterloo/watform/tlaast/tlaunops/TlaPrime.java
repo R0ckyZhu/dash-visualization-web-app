@@ -1,0 +1,26 @@
+package ca.uwaterloo.watform.tlaast.tlaunops;
+
+import ca.uwaterloo.watform.tlaast.TlaOperator;
+import ca.uwaterloo.watform.tlaast.TlaStrings;
+import ca.uwaterloo.watform.tlaast.TlaVar;
+
+public class TlaPrime extends TlaUnaryOp {
+
+    /*
+    VARIABLES V
+
+    F == V' ...
+
+    here, V is a TlaVar object, which is the child of a TlaPrime Object
+
+    */
+
+    public TlaPrime(TlaVar operand) {
+        super(operand, TlaOperator.PrecedenceGroup.SAFE);
+    }
+
+    @Override
+    public String toTLAPlusSnippetCore() {
+        return this.getTLASnippetOfChild(this.operand) + TlaStrings.PRIME;
+    }
+}

@@ -1,0 +1,94 @@
+/*
+    Because Solution is a class (and A4Solution is a class inside our Solution class, only one solution can exist at any time, thus
+    getting a list of Solutions is not an option.  We can iterate
+    soln.next() and writeXML right away but we cannot get a list of
+    satisfying solutions by iterating soln.next() because it will just
+    be a list of the same objects.
+*/
+
+package ca.uwaterloo.watform.alloyinterface;
+
+import static ca.uwaterloo.watform.utils.CommonStrings.*;
+import static ca.uwaterloo.watform.utils.GeneralUtil.*;
+
+import ca.uwaterloo.watform.alloymodel.AlloyModel;
+import ca.uwaterloo.watform.cli.Constants;
+import edu.mit.csail.sdg.alloy4.A4Reporter;
+import edu.mit.csail.sdg.alloy4.Err;
+import edu.mit.csail.sdg.ast.Command;
+import edu.mit.csail.sdg.parser.CompModule;
+import edu.mit.csail.sdg.parser.CompUtil;
+import edu.mit.csail.sdg.translator.A4Options;
+import edu.mit.csail.sdg.translator.A4Solution;
+import edu.mit.csail.sdg.translator.TranslateAlloyToKodkod;
+
+public class AlloyInterface {
+
+    public static CompModule parse(String alloyCode) throws Err {
+        return CompUtil.parseEverything_fromString(new A4Reporter(), alloyCode);
+    }
+
+    private static CompModule toAlloy(AlloyModel am) throws Err {
+        return parse(am.toString());
+    }
+
+    public static Boolean canParse(String alloyCode) {
+        try {
+            parse(alloyCode);
+            return true;
+        } catch (Err e) {
+            return false;
+        }
+    }
+
+    // keep these private; dashplus should be working from AlloyModel
+    // and DashModel
+    // assumption: cmdnum exists
+    private static Solution executeCommand(String alloyCode, int cmdnum) {
+        // this will put in a cmd 0: run {} if there are no other cmds
+        CompModule alloy = parse(alloyCode);
+        A4Reporter rep = new A4Reporter();
+        Command cmd = alloy.getAllCommands().get(cmdnum);
+        dashOutput("Executing cmd " + String.valueOf(cmdnum) + ": " + cmd.toString());
+        // turn off kodkod stuff going to screen
+        System.setProperty("org.slf4j.simpleLogger.log.kodkod.engine.config", "warn");
+        A4Solution ans =
+                TranslateAlloyToKodkod.execute_command(
+                        rep, alloy.getAllReachableSigs(), cmd, new A4Options());
+
+        dashOutput("Solution is : " + (ans.satisfiable() ? "SAT" : "UNSAT"));
+        return new Solution(ans, alloy);
+    }
+
+    public static Solution executeCommand(AlloyModel am, int cmdnum) {
+        // assumes this is a valid cmd or NOCMD
+        String alloyCode = am.toString();
+        if (cmdnum == Constants.noCmdValue) {
+            return checkModelSatisfiability(am);
+        } else {
+            return AlloyInterface.executeCommand(alloyCode, cmdnum);
+        }
+    }
+
+    public static Solution checkModelSatisfiability(AlloyModel am) {
+        // translate to Alloy without any commands ("false" arg to toString below)
+        // and ask it to execute cmd 0
+        // in converting Alloy to Kodkod, it will add a run {}
+        String alloyCode = am.toStringNoCmds();
+        return AlloyInterface.executeCommand(alloyCode, 0);
+    }
+
+    /*
+    // returns a String
+    public static String executeCommandToString(AlloyModel am, int cmdnum) {
+        Solution soln = executeCommand(am, cmdnum);
+        // print cmd; must exist or would have thrown error in line above
+        Optional<AlloyCmdPara> cmd = am.getCmdNum(cmdnum);
+        String result = cmd.map(Object::toString).orElse("");
+        // print solution: might be unsat
+        if (soln.isSat()) return result + "\nSATISFIABLE\n" + soln.toString();
+        else return result + "\nUNSATISFIABLE\n";
+    }
+    */
+
+}

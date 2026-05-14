@@ -1,0 +1,32 @@
+# Gradle
+.gradle/
+build/
+bin/
+
+# Logging
+*.log
+*.log.*
+
+# Metals
+.metals/
+.worksheet/
+
+# Eclipse metadata
+.project
+.classpath
+.settings/
+
+# Macos
+.DS_Store
+
+# Code
+.vscode/
+
+# test resources
+app/src/main/java/ca/uwaterloo/watform/test/catalyst/catalyst-corpus.zip
+app/src/main/java/ca/uwaterloo/watform/test/catalyst/catalyst-corpus
+app/src/main/java/ca/uwaterloo/watform/test/catalyst/timeout
+app/src/main/java/ca/uwaterloo/watform/test/catalyst/problemFiles
+
+# personal lists
+app/src/main/java/ca/uwaterloo/watform/nancy-list.md

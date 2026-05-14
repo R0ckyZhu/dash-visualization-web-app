@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dash Visualizer</title>
+  <script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/layout-base@2.0.1/layout-base.js"></script>
+  <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
+  <script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
+  <script src="https://unpkg.com/elkjs@0.9.3/lib/elk.bundled.js"></script>
+  <script src="https://unpkg.com/cytoscape-elk@2.2.0/dist/cytoscape-elk.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1923; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+
+    /* Toolbar */
+    #toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #16213e; border-bottom: 1px solid #1e3a5f; flex-shrink: 0; flex-wrap: wrap; }
+    #toolbar input[type="text"] { flex: 1; min-width: 200px; padding: 6px 12px; background: #0f1923; border: 1px solid #2a4a6b; border-radius: 4px; color: #e0e0e0; font-size: 13px; }
+    #toolbar input[type="text"]:focus { outline: none; border-color: #4fc3f7; }
+    #toolbar button { padding: 6px 14px; background: #1e3a5f; border: 1px solid #2a4a6b; border-radius: 4px; color: #e0e0e0; cursor: pointer; font-size: 13px; white-space: nowrap; }
+    #toolbar button:hover { background: #2a4a6b; }
+    #toolbar button:disabled { opacity: 0.4; cursor: default; }
+    #toolbar button.primary { background: #0277bd; border-color: #0288d1; }
+    #toolbar button.primary:hover { background: #0288d1; }
+    #toolbar button.sim { background: #1b5e20; border-color: #2e7d32; }
+    #toolbar button.sim:hover { background: #2e7d32; }
+    #toolbar .sep { color: #2a4a6b; user-select: none; }
+    #status { font-size: 12px; color: #78909c; margin-left: 8px; }
+
+    /* Main layout */
+    #main { display: flex; flex: 1; overflow: hidden; }
+    #cy { flex: 1; min-width: 0; overflow: hidden; }
+
+    /* Detail panel */
+    #detail-panel { width: 300px; background: #16213e; border-left: 1px solid #1e3a5f; padding: 16px; overflow-y: auto; flex-shrink: 0; display: none; }
+    #detail-panel.open { display: block; }
+    #detail-panel h3 { color: #4fc3f7; font-size: 14px; margin-bottom: 12px; }
+    .detail-row { margin-bottom: 8px; }
+    .detail-label { font-size: 11px; color: #78909c; text-transform: uppercase; letter-spacing: 0.5px; }
+    .detail-value { font-size: 13px; color: #e0e0e0; margin-top: 2px; word-break: break-all; }
+    .detail-value.null { color: #546e7a; font-style: italic; }
+    .detail-list { list-style: none; padding: 0; }
+    .detail-list li { font-size: 13px; padding: 2px 0; color: #b0bec5; }
+    #detail-close { float: right; background: none; border: none; color: #78909c; cursor: pointer; font-size: 16px; }
+
+    /* Trace timeline */
+    #timeline { display: none; background: #16213e; border-top: 1px solid #1e3a5f; padding: 10px 16px; flex-shrink: 0; }
+    #timeline.open { display: block; }
+    #timeline-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    #timeline-header h4 { color: #4fc3f7; font-size: 13px; margin: 0; }
+    #timeline-close { background: none; border: none; color: #78909c; cursor: pointer; font-size: 14px; padding: 2px 6px; }
+    #timeline-controls { display: flex; align-items: center; gap: 8px; }
+    #timeline-controls button { padding: 4px 10px; background: #1e3a5f; border: 1px solid #2a4a6b; border-radius: 3px; color: #e0e0e0; cursor: pointer; font-size: 12px; }
+    #timeline-controls button:hover { background: #2a4a6b; }
+    #timeline-controls button:disabled { opacity: 0.4; cursor: default; }
+    #step-label { font-size: 13px; color: #e0e0e0; min-width: 80px; text-align: center; }
+    #timeline-dots { display: flex; gap: 4px; align-items: center; margin-left: 12px; }
+    .step-dot { width: 12px; height: 12px; border-radius: 50%; background: #2a4a6b; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
+    .step-dot:hover { background: #4fc3f7; }
+    .step-dot.active { background: #4fc3f7; border-color: #81d4fa; }
+    .step-dot.unstable { background: #5c3a1e; }
+    .step-dot.unstable.active { background: #ff9800; border-color: #ffb74d; }
+    #timeline-info { display: flex; gap: 24px; margin-top: 6px; font-size: 12px; color: #b0bec5; }
+    #timeline-info .info-section { display: flex; gap: 6px; }
+    #timeline-info .info-label { color: #78909c; }
+
+    /* Trace graph panel */
+    #trace-panel { width: 280px; background: #0d1520; border-left: 1px solid #1e3a5f; flex-shrink: 0; display: none; flex-direction: column; }
+    #trace-panel.open { display: flex; }
+    #trace-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #16213e; border-bottom: 1px solid #1e3a5f; }
+    #trace-panel-header h4 { color: #4fc3f7; font-size: 13px; margin: 0; }
+    #trace-panel-close { background: none; border: none; color: #78909c; cursor: pointer; font-size: 14px; padding: 2px 6px; }
+    #trace-cy { flex: 1; min-height: 200px; }
+
+    /* Loading overlay */
+    #loading { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4fc3f7; font-size: 16px; }
+    #loading.active { display: block; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <input type="text" id="file-path" placeholder="Path to .dsh file (e.g., C:\path\to\model.dsh)" />
+    <button class="primary" id="btn-load">Load</button>
+    <span class="sep">|</span>
+    <button id="btn-fit" disabled>Fit</button>
+    <button id="btn-zoom-in" disabled>+</button>
+    <button id="btn-zoom-out" disabled>-</button>
+    <button id="btn-export" disabled>PNG</button>
+    <span class="sep">|</span>
+    <button class="sim" id="btn-simulate" disabled>Simulate</button>
+    <button id="btn-step" disabled>Step</button>
+    <button id="btn-alt" disabled>Alt</button>
+    <span id="status">No model loaded</span>
+  </div>
+  <div id="main">
+    <div id="cy">
+      <div id="loading">Loading model...</div>
+    </div>
+    <div id="detail-panel">
+      <button id="detail-close">&times;</button>
+      <div id="detail-content"></div>
+    </div>
+    <div id="trace-panel">
+      <div id="trace-panel-header">
+        <h4>State Tree</h4>
+        <button id="trace-panel-close">&times;</button>
+      </div>
+      <div id="trace-cy"></div>
+    </div>
+  </div>
+  <div id="timeline">
+    <div id="timeline-header">
+      <h4>Trace</h4>
+      <div id="timeline-dots"></div>
+      <button id="timeline-close">&times;</button>
+    </div>
+    <div id="timeline-controls">
+      <button id="btn-step-first">&laquo;</button>
+      <button id="btn-step-prev">&lsaquo; Prev</button>
+      <span id="step-label">Step 0 / 0</span>
+      <button id="btn-step-next">Next &rsaquo;</button>
+      <button id="btn-step-last">&raquo;</button>
+    </div>
+    <div id="timeline-info">
+      <div class="info-section"><span class="info-label">Transition:</span> <span id="info-transition">—</span></div>
+      <div class="info-section"><span class="info-label">Stable:</span> <span id="info-stable">—</span></div>
+      <div class="info-section"><span class="info-label">Variables:</span> <span id="info-vars">—</span></div>
+    </div>
+  </div>
+
+  <script>
+  // ── Register extensions ──
+  if (typeof cytoscapeFcose !== 'undefined') {
+    cytoscape.use(cytoscapeFcose);
+  }
+
+  // ── Types & State ──
+  let appState = { status: 'idle', model: null, selectedNode: null, selectedEdge: null };
+  let currentStateNodeId = null; // tracks which StateNode is selected for stepping
+  let lastStepStartNode = null; // tracks starting node for Alt (alternate path)
+  let cy = null;
+  let traceCy = null;    // second Cytoscape instance for the state tree
+  let traceState = null; // { snapshots, currentStep }
+  let stateGraph = null; // StateGraph instance
+  let traceNodePositions = {};  // { nodeId: {x, y} } — fixed positions for state tree nodes
+
+  // ── API Client ──
+  const API = 'http://127.0.0.1:8000';
+
+  async function loadModel(filePath) {
+    const resp = await fetch(`${API}/api/load`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath })
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to load model');
+    }
+    return resp.json();
+  }
+
+  async function translateModel(option = 'traces') {
+    const resp = await fetch(`${API}/api/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ option })
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to translate');
+    }
+    return resp.json();
+  }
+
+  async function initModel() {
+    const resp = await fetch(`${API}/api/init`, { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to initialize');
+    }
+    return resp.json();
+  }
+
+  async function executeModel(cmdIdx = -1) {
+    const resp = await fetch(`${API}/api/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cmdIdx })
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to execute');
+    }
+    return resp.json();
+  }
+
+  async function nextSolution() {
+    const resp = await fetch(`${API}/api/solution/next`, { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to get next solution');
+    }
+    return resp.json();
+  }
+
+  async function stepFromState(initState) {
+    const resp = await fetch(`${API}/api/step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initState, maxScope: 10 })
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to step');
+    }
+    return resp.json();
+  }
+
+  // ── Model → Cytoscape Elements ──
+  function modelToCytoscape(model) {
+    const elements = [];
+
+    // Sort states by ID so ELK places them in natural order (Bit1 before Bit2, etc.)
+    const sortedStates = [...model.states].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
+    for (const state of sortedStates) {
+      const isLeaf = state.kind === 'BASIC';
+      let classes;
+      if (!isLeaf && state.kind === 'AND') classes = 'compound-and';
+      else if (!isLeaf && state.kind === 'OR') classes = 'compound-or';
+      else if (state.isDefault) classes = 'default-state';
+      else classes = 'state';
+
+      const label = state.id.split('/').pop();
+      const node = {
+        data: { id: state.id, label, kind: state.kind, fullData: state },
+        classes
+      };
+      if (state.parent) node.data.parent = state.parent;
+      elements.push(node);
+    }
+
+    // Sort transitions by ID so T1 appears before T2, etc.
+    const sortedTransitions = [...model.transitions].sort((a, b) =>
+      (a.id || '').localeCompare(b.id || '', undefined, { numeric: true })
+    );
+
+    for (const t of sortedTransitions) {
+      if (!t.from || !t.to) continue;
+
+      elements.push({
+        data: {
+          id: 'edge_' + t.id,
+          source: t.from,
+          target: t.to,
+          label: t.id.split('/').pop(),
+          fullData: t
+        }
+      });
+    }
+
+    return elements;
+  }
+
+  // ── Cytoscape Styles ──
+  const cytoscapeStyles = [
+    {
+      selector: 'node.compound-and',
+      style: {
+        'background-color': '#1e3a5f',
+        'background-opacity': 0.5,
+        'border-width': 2,
+        'border-color': '#4fc3f7',
+        'label': 'data(label)',
+        'text-valign': 'top',
+        'text-halign': 'center',
+        'color': '#4fc3f7',
+        'font-size': 16,
+        'font-weight': 'bold',
+        'padding': '20px',
+        'shape': 'roundrectangle',
+        'text-margin-y': -5
+      }
+    },
+    {
+      selector: 'node.compound-or',
+      style: {
+        'background-color': '#162447',
+        'background-opacity': 0.4,
+        'border-width': 2,
+        'border-style': 'dashed',
+        'border-color': '#7986cb',
+        'label': 'data(label)',
+        'text-valign': 'top',
+        'text-halign': 'center',
+        'color': '#7986cb',
+        'font-size': 14,
+        'padding': '20px',
+        'shape': 'roundrectangle',
+        'text-margin-y': -5
+      }
+    },
+    {
+      selector: 'node.state',
+      style: {
+        'background-color': '#2e7d32',
+        'label': 'data(label)',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'color': '#fff',
+        'font-size': 13,
+        'width': 80,
+        'height': 40,
+        'border-width': 2,
+        'border-color': '#43a047',
+        'shape': 'roundrectangle'
+      }
+    },
+    {
+      selector: 'node.default-state',
+      style: {
+        'background-color': '#f9a825',
+        'label': 'data(label)',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'color': '#333',
+        'font-size': 13,
+        'font-weight': 'bold',
+        'width': 80,
+        'height': 40,
+        'border-width': 3,
+        'border-color': '#f57f17',
+        'shape': 'roundrectangle'
+      }
+    },
+    {
+      selector: 'node.selected-node',
+      style: {
+        'border-color': '#ff5722',
+        'border-width': 4
+      }
+    },
+    // Trace: active state highlighting
+    {
+      selector: 'node.trace-active',
+      style: {
+        'border-color': '#00e676',
+        'border-width': 4,
+        'shadow-blur': 15,
+        'shadow-color': '#00e676',
+        'shadow-opacity': 0.6
+      }
+    },
+    // Trace: dimmed inactive states during trace
+    {
+      selector: 'node.trace-inactive',
+      style: {
+        'opacity': 0.4
+      }
+    },
+    // Trace: taken transition highlighting
+    {
+      selector: 'edge.trace-taken',
+      style: {
+        'line-color': '#00e676',
+        'target-arrow-color': '#00e676',
+        'width': 3,
+        'color': '#00e676'
+      }
+    },
+    // Trace: dimmed inactive edges during trace
+    {
+      selector: 'edge.trace-inactive',
+      style: {
+        'opacity': 0.25
+      }
+    },
+    {
+      selector: 'edge',
+      style: {
+        'label': 'data(label)',
+        'curve-style': 'bezier',
+        'control-point-step-size': 40,
+        'target-arrow-shape': 'triangle',
+        'arrow-scale': 1.2,
+        'font-size': 12,
+        'color': '#e0e0e0',
+        'text-background-color': '#0f1923',
+        'text-background-opacity': 0.9,
+        'text-background-padding': '4px',
+        'text-background-shape': 'roundrectangle',
+        'text-margin-y': -12,
+        'line-color': '#78909c',
+        'target-arrow-color': '#78909c',
+        'width': 2
+      }
+    },
+    {
+      selector: 'edge.selected-edge',
+      style: {
+        'line-color': '#ff5722',
+        'target-arrow-color': '#ff5722',
+        'width': 3
+      }
+    }
+  ];
+
+  // ── ELK Layout Config ──
+  // Spacing is derived from node dimensions so the layout adapts automatically.
+  const NODE_W = 80, NODE_H = 40;
+
+  function buildElkLayout(model) {
+    // Spacing is derived from node size — no manual pixel tuning.
+    const betweenLayers = NODE_H * 3;    // vertical gap between layers
+    const nodeNode      = NODE_W * 0.8;  // horizontal gap between siblings
+    const edgeNode      = NODE_H * 0.5;  // clearance between edges and nodes
+    const pad           = NODE_H;        // compound node internal padding
+
+    // Shared spacing options applied to every compound node via layoutOptions
+    const spacingOpts = {
+      'elk.layered.spacing.nodeNodeBetweenLayers': betweenLayers,
+      'elk.spacing.nodeNode': nodeNode,
+      'elk.layered.spacing.edgeNodeBetweenLayers': edgeNode,
+      'elk.spacing.edgeEdge': edgeNode,
+      'elk.padding': `[top=${pad},left=${pad},bottom=${pad},right=${pad}]`,
+      'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES'
+    };
+
+    return {
+      name: 'elk',
+      nodeDimensionsIncludeLabels: true,
+      elk: {
+        algorithm: 'layered',
+        'elk.direction': 'DOWN',
+        'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+        'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+        'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+        'elk.separateConnectedComponents': 'true',
+        'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+        'elk.edgeRouting': 'POLYLINE',
+        ...spacingOpts
+      },
+      // Per-node ELK options: padding on compounds, layer constraint on defaults
+      nodeLayoutOptions: function(node) {
+        if (node.isParent && node.isParent()) {
+          return {
+            'elk.padding': `[top=${pad},left=${pad},bottom=${pad},right=${pad}]`
+          };
+        }
+        const fullData = node.data('fullData');
+        if (fullData && fullData.isDefault) {
+          return { 'elk.layered.layering.layerConstraint': 'FIRST' };
+        }
+      }
+    };
+  }
+
+  // ── Deterministic Recursive Layout ──
+  // Lays out the graph bottom-up: leaf nodes first, then compounds.
+  // Guarantees: sorted order left-to-right, default states on top, identical
+  // structures get identical layouts, no overlap.
+  function deterministicLayout(cy) {
+    const PAD = 40;       // padding inside compound nodes
+    const GAP_X = 60;     // horizontal gap between sibling nodes
+    const GAP_Y = 60;     // vertical gap between rows
+    const LEAF_W = 110;   // estimated leaf node width
+    const LEAF_H = 45;    // estimated leaf node height
+
+    // Returns { width, height } of the laid-out subtree rooted at `node`.
+    // Positions all descendants of `node` relative to (ox, oy) as top-left origin.
+    function layoutNode(node, ox, oy) {
+      const children = node.children();
+      if (children.length === 0) {
+        // Leaf node — position its center
+        node.position({ x: ox + LEAF_W / 2, y: oy + LEAF_H / 2 });
+        return { width: LEAF_W, height: LEAF_H };
+      }
+
+      // Separate children into leaf vs compound
+      const leaves = children.filter(c => !c.isParent());
+      const compounds = children.filter(c => c.isParent());
+
+      // Sort compounds alphabetically by label
+      const sortByLabel = (a, b) => {
+        const la = a.data('label') || a.id();
+        const lb = b.data('label') || b.id();
+        return la.localeCompare(lb, undefined, { numeric: true });
+      };
+      const sortedCompounds = compounds.sort(sortByLabel);
+
+      // Sort leaves: default states first, then alphabetically
+      const sortedLeaves = leaves.sort((a, b) => {
+        const aDef = a.hasClass('default-state') ? 0 : 1;
+        const bDef = b.hasClass('default-state') ? 0 : 1;
+        if (aDef !== bDef) return aDef - bDef;
+        return sortByLabel(a, b);
+      });
+
+      // Inner origin (after padding + space for compound label)
+      const labelH = 20;
+      let ix = ox + PAD;
+      let iy = oy + PAD + labelH;
+      let maxW = 0;
+      let cursorY = iy;
+
+      // Row 1: default leaf states across the top
+      const defaults = sortedLeaves.filter(l => l.hasClass('default-state'));
+      const nonDefaults = sortedLeaves.filter(l => !l.hasClass('default-state'));
+
+      let rowW = 0;
+      if (defaults.length > 0) {
+        let cx = ix;
+        for (const leaf of defaults) {
+          leaf.position({ x: cx + LEAF_W / 2, y: cursorY + LEAF_H / 2 });
+          cx += LEAF_W + GAP_X;
+        }
+        rowW = cx - ix - GAP_X;
+        maxW = Math.max(maxW, rowW);
+        cursorY += LEAF_H + GAP_Y;
+      }
+
+      // Row 2+: compound children side by side
+      if (sortedCompounds.length > 0) {
+        let cx = ix;
+        let rowH = 0;
+        for (const comp of sortedCompounds) {
+          const sz = layoutNode(comp, cx, cursorY);
+          cx += sz.width + GAP_X;
+          rowH = Math.max(rowH, sz.height);
+        }
+        rowW = cx - ix - GAP_X;
+        maxW = Math.max(maxW, rowW);
+        cursorY += rowH + GAP_Y;
+      }
+
+      // Row 3+: non-default leaf states in a grid
+      if (nonDefaults.length > 0) {
+        // Use same number of columns as widest row above, or at least 2
+        const cols = Math.max(2, Math.ceil(maxW / (LEAF_W + GAP_X)));
+        let cx = ix, colIdx = 0, rowH = LEAF_H;
+        for (const leaf of nonDefaults) {
+          leaf.position({ x: cx + LEAF_W / 2, y: cursorY + LEAF_H / 2 });
+          cx += LEAF_W + GAP_X;
+          colIdx++;
+          if (colIdx >= cols) {
+            colIdx = 0;
+            cx = ix;
+            cursorY += LEAF_H + GAP_Y;
+          }
+        }
+        rowW = Math.min(nonDefaults.length, cols) * (LEAF_W + GAP_X) - GAP_X;
+        maxW = Math.max(maxW, rowW);
+        cursorY += LEAF_H; // last row height
+      }
+
+      const totalW = maxW + PAD * 2;
+      const totalH = (cursorY - oy) + PAD;
+      return { width: totalW, height: totalH };
+    }
+
+    // Find root compound nodes (nodes with no parent that are compounds)
+    const roots = cy.nodes().filter(n => n.isParent() && !n.data('parent'));
+    const sortedRoots = roots.sort((a, b) => {
+      const la = a.data('label') || a.id();
+      const lb = b.data('label') || b.id();
+      return la.localeCompare(lb, undefined, { numeric: true });
+    });
+
+    // Orphan leaves (no parent) — unlikely in Dash but handle gracefully
+    const orphanLeaves = cy.nodes().filter(n => !n.isParent() && !n.data('parent'));
+
+    let ox = 0;
+    for (const root of sortedRoots) {
+      const sz = layoutNode(root, ox, 0);
+      ox += sz.width + GAP_X * 2;
+    }
+
+    // Place any orphan leaves after the compounds
+    orphanLeaves.forEach((leaf, i) => {
+      leaf.position({ x: ox + LEAF_W / 2, y: i * (LEAF_H + GAP_Y) + LEAF_H / 2 });
+    });
+  }
+
+  // ── Render Graph ──
+  function renderGraph(model) {
+    const elements = modelToCytoscape(model);
+    if (cy) cy.destroy();
+
+    cy = cytoscape({
+      container: document.getElementById('cy'),
+      elements,
+      style: cytoscapeStyles,
+      layout: { name: 'preset' }
+    });
+
+    // Run deterministic layout then fit
+    deterministicLayout(cy);
+    cy.fit(null, 30);
+
+
+    // Constrained dragging: prevent leaf nodes from entering any compound
+    // they don't belong to (i.e., any compound not in their ancestor chain).
+    cy.on('drag', 'node', e => {
+      const node = e.target;
+      if (node.isParent()) return; // only constrain leaf nodes
+
+      const ancestors = node.ancestors();
+      // Every compound that isn't an ancestor is off-limits
+      const forbidden = cy.nodes().filter(n => n.isParent() && !ancestors.contains(n));
+
+      const pos = node.position();
+      const nw = node.outerWidth() / 2;
+      const nh = node.outerHeight() / 2;
+      let cx = pos.x, cy_ = pos.y;
+
+      forbidden.forEach(sib => {
+        const sbb = sib.boundingBox({ includeLabels: false, includeOverlays: false });
+        const margin = 8;
+        const sx1 = sbb.x1 - margin, sx2 = sbb.x2 + margin;
+        const sy1 = sbb.y1 - margin, sy2 = sbb.y2 + margin;
+
+        // Check overlap
+        if (cx + nw > sx1 && cx - nw < sx2 && cy_ + nh > sy1 && cy_ - nh < sy2) {
+          // Push out via shortest escape direction
+          const pushLeft  = sx1 - (cx + nw);
+          const pushRight = sx2 - (cx - nw);
+          const pushUp    = sy1 - (cy_ + nh);
+          const pushDown  = sy2 - (cy_ - nh);
+
+          const minAbs = Math.min(Math.abs(pushLeft), Math.abs(pushRight), Math.abs(pushUp), Math.abs(pushDown));
+          if (minAbs === Math.abs(pushLeft))       cx += pushLeft;
+          else if (minAbs === Math.abs(pushRight))  cx += pushRight;
+          else if (minAbs === Math.abs(pushUp))     cy_ += pushUp;
+          else                                      cy_ += pushDown;
+        }
+      });
+
+      if (cx !== pos.x || cy_ !== pos.y) {
+        node.position({ x: cx, y: cy_ });
+      }
+    });
+
+    cy.on('tap', 'node', e => {
+      const node = e.target;
+      selectNode(node.id(), node.data('fullData'));
+    });
+
+    cy.on('tap', 'edge', e => {
+      const edge = e.target;
+      selectEdge(edge.id(), edge.data('fullData'));
+    });
+
+    cy.on('tap', e => {
+      if (e.target === cy) clearSelection();
+    });
+
+    setButtons(true);
+  }
+
+  // ── Selection ──
+  function selectNode(id, data) {
+    clearSelection();
+    appState.selectedNode = id;
+    cy.getElementById(id).addClass('selected-node');
+    showNodeDetail(data);
+  }
+
+  function selectEdge(id, data) {
+    clearSelection();
+    appState.selectedEdge = id;
+    cy.getElementById(id).addClass('selected-edge');
+    showEdgeDetail(data);
+  }
+
+  function clearSelection() {
+    if (cy) {
+      cy.elements().removeClass('selected-node selected-edge');
+    }
+    appState.selectedNode = null;
+    appState.selectedEdge = null;
+    document.getElementById('detail-panel').classList.remove('open');
+  }
+
+  // ── Detail Panel ──
+  function showNodeDetail(state) {
+    const panel = document.getElementById('detail-panel');
+    const content = document.getElementById('detail-content');
+
+    const childrenHtml = state.children.length > 0
+      ? state.children.map(c => `<li>${c.split('/').pop()}</li>`).join('')
+      : '<li class="null">none</li>';
+
+    const paramsHtml = state.params.length > 0
+      ? state.params.map(p => `<li>${p.stateName}: ${p.paramSig}</li>`).join('')
+      : '<li class="null">none</li>';
+
+    content.innerHTML = `
+      <h3>State</h3>
+      ${detailRow('Name', state.id)}
+      ${detailRow('Kind', state.kind)}
+      ${detailRow('Parent', state.parent || 'none', !state.parent)}
+      ${detailRow('Default', state.isDefault ? 'Yes' : 'No')}
+      <div class="detail-row">
+        <div class="detail-label">Children</div>
+        <ul class="detail-list">${childrenHtml}</ul>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Parameters</div>
+        <ul class="detail-list">${paramsHtml}</ul>
+      </div>
+    `;
+    panel.classList.add('open');
+  }
+
+  function showEdgeDetail(trans) {
+    const panel = document.getElementById('detail-panel');
+    const content = document.getElementById('detail-content');
+
+    content.innerHTML = `
+      <h3>Transition</h3>
+      ${detailRow('Name', trans.id)}
+      ${detailRow('From', trans.from || 'none', !trans.from)}
+      ${detailRow('To', trans.to || 'none', !trans.to)}
+      ${detailRow('Event (on)', trans.on || 'none', !trans.on)}
+      ${detailRow('Guard (when)', trans.when || 'none', !trans.when)}
+      ${detailRow('Action (do)', trans.do || 'none', !trans.do)}
+      ${detailRow('Send', trans.send || 'none', !trans.send)}
+    `;
+    panel.classList.add('open');
+  }
+
+  function detailRow(label, value, isNull = false) {
+    return `<div class="detail-row">
+      <div class="detail-label">${label}</div>
+      <div class="detail-value${isNull ? ' null' : ''}">${escapeHtml(value)}</div>
+    </div>`;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ══════════════════════════════════════════
+  // ── Trace / Simulation Logic ──
+  // ══════════════════════════════════════════
+
+  /**
+   * Build mappings from Alloy atom names to Dash model IDs.
+   * Alloy atoms: "Mutex_Process1_NonCritical$0" → Dash ID: "Mutex/Process1/NonCritical"
+   * Strategy: for each state/transition in the model, compute the underscore form
+   * and map it back.
+   */
+  function buildAtomMappings(model) {
+    const atomToState = {};      // "Mutex_Process1_NonCritical" → "Mutex/Process1/NonCritical"
+    const atomToTransition = {}; // "Mutex_Process1_wait" → "Mutex/Process1/wait"
+
+    for (const s of model.states) {
+      const atom = s.id.replace(/\//g, '_');
+      atomToState[atom] = s.id;
+    }
+    for (const t of model.transitions) {
+      const atom = t.id.replace(/\//g, '_');
+      atomToTransition[atom] = t.id;
+    }
+    return { atomToState, atomToTransition };
+  }
+
+  /**
+   * Strip the Alloy instance suffix ($0, $1, etc.) from an atom name.
+   */
+  function stripAtomSuffix(atom) {
+    return atom.replace(/\$\d+$/, '');
+  }
+
+  /**
+   * Parse an Alloy solution into an ordered list of snapshots.
+   * Each snapshot: { id, activeStates: [stateId, ...], takenTransition: transId|null, stable: bool, vars: {name: value} }
+   */
+  function parseSolution(solution, model) {
+    const rels = solution.relations;
+    const { atomToState, atomToTransition } = buildAtomMappings(model);
+
+    // 1. Build snapshot ordering
+    const firstSnap = rels['__Snapshot/Ord.First']?.[0]?.[0];
+    const nextMap = {};
+    for (const [from, to] of (rels['__Snapshot/Ord.Next'] || [])) {
+      nextMap[from] = to;
+    }
+
+    // Order snapshots
+    const snapshotOrder = [];
+    let current = firstSnap;
+    while (current) {
+      snapshotOrder.push(current);
+      current = nextMap[current];
+    }
+
+    if (snapshotOrder.length === 0) return [];
+
+    // 2. Parse conf (active states per snapshot)
+    const confMap = {}; // snapAtom → [stateId, ...]
+    for (const [snap, stateAtom] of (rels['this/__Snapshot.__conf0'] || [])) {
+      if (!confMap[snap]) confMap[snap] = [];
+      const stateKey = stripAtomSuffix(stateAtom);
+      const stateId = atomToState[stateKey];
+      if (stateId) confMap[snap].push(stateId);
+    }
+
+    // 3. Parse taken transitions per snapshot
+    const takenMap = {}; // snapAtom → transitionId
+    for (const [snap, transAtom] of (rels['this/__Snapshot.__taken0'] || [])) {
+      const transKey = stripAtomSuffix(transAtom);
+      const transId = atomToTransition[transKey];
+      if (transId) takenMap[snap] = transId;
+    }
+
+    // 4. Parse stable flag per snapshot
+    const stableMap = {};
+    for (const [snap, boolAtom] of (rels['this/__Snapshot.__stable'] || [])) {
+      stableMap[snap] = boolAtom.includes('True');
+    }
+
+    // 5. Parse variable values per snapshot
+    // Variable relations look like: "this/__Snapshot.RootName_varName" → [[snap, valueAtom], ...]
+    const varRelations = {};
+    for (const key of Object.keys(rels)) {
+      if (key.startsWith('this/__Snapshot.') && !key.includes('__conf') && !key.includes('__taken') && !key.includes('__stable') && !key.includes('__sc_used')) {
+        const varName = key.replace('this/__Snapshot.', '').replace(/_/g, '/');
+        varRelations[varName] = rels[key];
+      }
+    }
+
+    // 6. Build snapshot objects
+    const snapshots = snapshotOrder.map((snapAtom, idx) => {
+      const vars = {};
+      for (const [varName, tuples] of Object.entries(varRelations)) {
+        for (const tuple of tuples) {
+          if (tuple[0] === snapAtom && tuple.length >= 2) {
+            let val = stripAtomSuffix(tuple[1]);
+            // Clean up boolean values
+            if (val === 'boolean/True') val = 'true';
+            else if (val === 'boolean/False') val = 'false';
+            vars[varName] = val;
+          }
+        }
+      }
+
+      return {
+        id: snapAtom,
+        index: idx,
+        activeStates: confMap[snapAtom] || [],
+        takenTransition: takenMap[snapAtom] || null,
+        stable: stableMap[snapAtom] !== false,
+        vars
+      };
+    });
+
+    return snapshots;
+  }
+
+  /**
+   * Apply highlighting from a StateNode (used when clicking trace graph nodes).
+   * Uses the StateNode's own data rather than looking up a snapshot by index.
+   */
+  /**
+   * Highlight a state configuration in the main statechart.
+   * @param {number} stateNodeId - The StateNode id to highlight
+   * @param {string|null} transition - Override which transition to highlight.
+   *   If null/undefined, falls back to sn.takenTransition (first-arrival).
+   */
+  function applyStateNode(stateNodeId, transition) {
+    if (!cy || !stateGraph) return;
+    const sn = stateGraph.nodes.find(n => n.id === stateNodeId);
+    if (!sn) return;
+
+    // Resolve which transition to highlight
+    const activeTransition = (transition !== undefined) ? transition : sn.takenTransition;
+
+    // Track the currently selected state node for stepping
+    currentStateNodeId = stateNodeId;
+    document.getElementById('btn-step').disabled = false;
+
+    // Clear previous trace classes
+    cy.elements().removeClass('trace-active trace-inactive trace-taken');
+
+    // Highlight active states from the StateNode
+    const activeSet = new Set(sn.activeStates);
+    cy.nodes().forEach(node => {
+      if (node.isParent()) return;
+      if (activeSet.has(node.id())) {
+        node.addClass('trace-active');
+      } else {
+        node.addClass('trace-inactive');
+      }
+    });
+
+    // Highlight taken transition
+    cy.edges().forEach(edge => {
+      const fullData = edge.data('fullData');
+      if (fullData && activeTransition && fullData.id === activeTransition) {
+        edge.addClass('trace-taken');
+      } else {
+        edge.addClass('trace-inactive');
+      }
+    });
+
+    // Update info bar with StateNode data
+    const transEl = document.getElementById('info-transition');
+    if (activeTransition) {
+      transEl.textContent = activeTransition;
+      transEl.style.color = '#00e676';
+    } else {
+      transEl.textContent = '—';
+      transEl.style.color = '#78909c';
+    }
+
+    const stableEl = document.getElementById('info-stable');
+    stableEl.textContent = sn.stable ? 'Yes' : 'No';
+    stableEl.style.color = sn.stable ? '#4fc3f7' : '#ff9800';
+
+    const varsEl = document.getElementById('info-vars');
+    const varEntries = Object.entries(sn.vars);
+    varsEl.textContent = varEntries.length > 0
+      ? varEntries.map(([k, v]) => `${k.split('/').pop()}=${v}`).join(', ')
+      : '—';
+
+    document.getElementById('step-label').textContent = sn.label;
+
+    // Highlight the node in the trace graph
+    highlightTraceGraphNode(stateNodeId);
+  }
+
+  /**
+   * Apply trace highlighting for a given snapshot step.
+   */
+  function applyTraceStep(stepIdx) {
+    if (!traceState || !cy) return;
+
+    const snap = traceState.snapshots[stepIdx];
+    if (!snap) return;
+
+    traceState.currentStep = stepIdx;
+
+    // Clear previous trace classes
+    cy.elements().removeClass('trace-active trace-inactive trace-taken');
+
+    // Mark active leaf states
+    const activeSet = new Set(snap.activeStates);
+    cy.nodes().forEach(node => {
+      if (node.isParent()) return; // don't dim compound nodes
+      if (activeSet.has(node.id())) {
+        node.addClass('trace-active');
+      } else {
+        node.addClass('trace-inactive');
+      }
+    });
+
+    // Dim inactive edges, highlight taken transition
+    cy.edges().forEach(edge => {
+      const fullData = edge.data('fullData');
+      if (fullData && snap.takenTransition && fullData.id === snap.takenTransition) {
+        edge.addClass('trace-taken');
+      } else {
+        edge.addClass('trace-inactive');
+      }
+    });
+
+    // Track the current state node for stepping
+    if (traceState.traceNodes && traceState.traceNodes[stepIdx]) {
+      currentStateNodeId = traceState.traceNodes[stepIdx].id;
+      document.getElementById('btn-step').disabled = false;
+    }
+
+    // Update timeline UI and trace graph
+    updateTimelineUI(stepIdx);
+    // Find the StateNode for this step and highlight it in the trace graph
+    if (traceState.traceNodes && traceState.traceNodes[stepIdx]) {
+      highlightTraceGraphNode(traceState.traceNodes[stepIdx].id);
+    }
+  }
+
+  /**
+   * Update timeline controls and info for the current step.
+   */
+  function updateTimelineUI(stepIdx) {
+    if (!traceState) return;
+    const snap = traceState.snapshots[stepIdx];
+    const total = traceState.snapshots.length;
+
+    document.getElementById('step-label').textContent = `Step ${stepIdx} / ${total - 1}`;
+    document.getElementById('btn-step-prev').disabled = stepIdx <= 0;
+    document.getElementById('btn-step-first').disabled = stepIdx <= 0;
+    document.getElementById('btn-step-next').disabled = stepIdx >= total - 1;
+    document.getElementById('btn-step-last').disabled = stepIdx >= total - 1;
+
+    // Transition info
+    const transEl = document.getElementById('info-transition');
+    if (snap.takenTransition) {
+      transEl.textContent = snap.takenTransition;
+      transEl.style.color = '#00e676';
+    } else {
+      transEl.textContent = '—';
+      transEl.style.color = '#78909c';
+    }
+
+    // Stable info
+    const stableEl = document.getElementById('info-stable');
+    stableEl.textContent = snap.stable ? 'Yes' : 'No';
+    stableEl.style.color = snap.stable ? '#4fc3f7' : '#ff9800';
+
+    // Variables info
+    const varsEl = document.getElementById('info-vars');
+    const varEntries = Object.entries(snap.vars);
+    if (varEntries.length > 0) {
+      varsEl.textContent = varEntries.map(([k, v]) => `${k.split('/').pop()}=${v}`).join(', ');
+    } else {
+      varsEl.textContent = '—';
+    }
+
+    // Update dots
+    const dots = document.querySelectorAll('.step-dot');
+    dots.forEach((dot, i) => {
+      dot.classList.toggle('active', i === stepIdx);
+    });
+  }
+
+  /**
+   * Build the timeline dot indicators.
+   */
+  function buildTimelineDots(snapshots) {
+    const container = document.getElementById('timeline-dots');
+    container.innerHTML = '';
+    snapshots.forEach((snap, i) => {
+      const dot = document.createElement('div');
+      dot.className = 'step-dot' + (snap.stable ? '' : ' unstable');
+      if (i === 0) dot.classList.add('active');
+      dot.title = `Step ${i}` + (snap.stable ? '' : ' (unstable)');
+      dot.addEventListener('click', () => applyTraceStep(i));
+      container.appendChild(dot);
+    });
+  }
+
+  /**
+   * Clear trace state and remove highlighting.
+   */
+  function clearTrace() {
+    traceState = null;
+    stateGraph = null;
+    traceNodePositions = {};
+    if (cy) {
+      cy.elements().removeClass('trace-active trace-inactive trace-taken');
+    }
+    if (traceCy) { traceCy.destroy(); traceCy = null; }
+    document.getElementById('timeline').classList.remove('open');
+    document.getElementById('trace-panel').classList.remove('open');
+    document.getElementById('btn-alt').disabled = true;
+  }
+
+  /**
+   * Handle a new solution from the server.
+   */
+  function handleSolution(solution, model) {
+    if (!solution.satisfiable) {
+      if (stateGraph && stateGraph.nodes.length > 0) {
+        // No more solutions, but keep existing state tree
+        setStatus(`No alternate execution paths. State tree has ${stateGraph.nodes.length} unique states.`);
+        document.getElementById('btn-alt').disabled = true;
+      } else {
+        setStatus('No satisfying trace found (UNSAT)');
+        clearTrace();
+      }
+      return;
+    }
+
+    const snapshots = parseSolution(solution, model);
+    if (snapshots.length === 0) {
+      setStatus('Solution has no snapshots');
+      clearTrace();
+      return;
+    }
+
+    // Build / extend the state graph
+    if (!stateGraph) stateGraph = new StateGraph();
+    const traceNodes = stateGraph.addTrace(snapshots);
+
+    traceState = { snapshots, currentStep: 0, traceNodes };
+
+    // Build timeline UI
+    buildTimelineDots(snapshots);
+    document.getElementById('timeline').classList.add('open');
+    document.getElementById('btn-alt').disabled = false;
+
+    // Render the trace graph
+    renderTraceGraph();
+
+    // Apply first step
+    applyTraceStep(0);
+
+    setStatus(`Trace: ${snapshots.length} snapshots, ${stateGraph.nodes.length} unique states (${snapshots.filter(s => s.stable).length} stable)`);
+  }
+
+  /**
+   * Handle the initial state solution (single snapshot, scope=1).
+   * Creates S1 in the state tree and sets it as the current node.
+   */
+  function handleInitSolution(solution, model) {
+    if (!solution.satisfiable) {
+      setStatus('Initial state is unsatisfiable (UNSAT)');
+      return;
+    }
+
+    const snapshots = parseSolution(solution, model);
+    if (snapshots.length === 0) {
+      setStatus('No initial state found');
+      return;
+    }
+
+    // Create fresh state graph with S1
+    stateGraph = new StateGraph();
+    const snap = snapshots[0];
+    const node = stateGraph.addNode(new StateNode(0, snap));
+
+    // Set up state tracking
+    currentStateNodeId = node.id;
+    lastStepStartNode = null; // no step taken yet
+
+    // Show timeline and enable Step
+    document.getElementById('timeline').classList.add('open');
+    document.getElementById('btn-alt').disabled = true;
+    document.getElementById('btn-step').disabled = false;
+
+    // Render state tree and highlight S1
+    renderTraceGraph();
+    applyStateNode(node.id);
+
+    setStatus(`Initial state ${node.label} found. Click Step to explore transitions.`);
+  }
+
+  /**
+   * Handle a step solution from the server.
+   * The first snapshot corresponds to the starting node (already in the graph).
+   * Remaining snapshots are new transitions from that node.
+   */
+  function handleStepSolution(solution, model, startNode) {
+    if (!solution.satisfiable) {
+      setStatus(`No transitions from ${startNode.label}. State tree has ${stateGraph.nodes.length} unique states.`);
+      document.getElementById('btn-alt').disabled = true;
+      return;
+    }
+
+    const snapshots = parseSolution(solution, model);
+    if (snapshots.length < 2) {
+      setStatus(`No new states found from ${startNode.label}.`);
+      return;
+    }
+
+    // Skip the first snapshot (it's the starting node we already have).
+    // Add the remaining snapshots as new nodes/edges from startNode.
+    const newSnapshots = snapshots.slice(1);
+
+    let lastNode = null;
+    for (const snap of newSnapshots) {
+      const candidate = new StateNode(0, snap);
+      let existingNode = stateGraph.findExisting(candidate);
+      if (!existingNode) {
+        existingNode = stateGraph.addNode(candidate);
+      }
+      // Add edge from startNode to this node
+      const transLabel = snap.takenTransition || '';
+      startNode.addStep(existingNode, transLabel);
+      lastNode = existingNode;
+    }
+
+    // Re-render the trace graph
+    renderTraceGraph();
+
+    // Select the NEW node (last discovered), not the start node.
+    // Pass the actual transition that was just taken (from the last snapshot).
+    if (lastNode) {
+      currentStateNodeId = lastNode.id;
+      const lastTrans = newSnapshots[newSnapshots.length - 1].takenTransition || null;
+      applyStateNode(lastNode.id, lastTrans);
+    }
+
+    // Enable Alt to find alternate execution paths from the same start
+    document.getElementById('btn-alt').disabled = false;
+
+    const stableCount = stateGraph.nodes.filter(n => n.stable).length;
+    setStatus(`Stepped: ${startNode.label} → ${lastNode ? lastNode.label : '?'}. State tree: ${stateGraph.nodes.length} states (${stableCount} stable)`);
+  }
+
+
+  // ══════════════════════════════════════════
+  // ── State Tree Graph (mirrors Java StateGraph/StateNode) ──
+  // ══════════════════════════════════════════
+
+  /**
+   * A StateNode represents a unique system configuration.
+   * Two snapshots with the same sorted activeStates + vars are the same node.
+   */
+  class StateNode {
+    constructor(id, snapshot) {
+      this.id = id;                               // integer identifier (1-based like Java)
+      this.activeStates = [...snapshot.activeStates].sort();
+      this.takenTransition = snapshot.takenTransition;
+      this.stable = snapshot.stable;
+      this.vars = { ...snapshot.vars };
+      this.steps = [];                             // outgoing edges: [{node, transitionLabel}]
+      this.snapshotIndex = snapshot.index;          // which snapshot this corresponds to
+    }
+
+    /** Two nodes are equal if they have the same active states and variable values */
+    equals(other) {
+      if (this.activeStates.length !== other.activeStates.length) return false;
+      for (let i = 0; i < this.activeStates.length; i++) {
+        if (this.activeStates[i] !== other.activeStates[i]) return false;
+      }
+      const keys1 = Object.keys(this.vars).sort();
+      const keys2 = Object.keys(other.vars).sort();
+      if (keys1.length !== keys2.length) return false;
+      for (let i = 0; i < keys1.length; i++) {
+        if (keys1[i] !== keys2[i] || this.vars[keys1[i]] !== other.vars[keys2[i]]) return false;
+      }
+      return true;
+    }
+
+    addStep(targetNode, transitionLabel) {
+      // Don't add duplicate edges
+      if (!this.steps.some(s => s.node === targetNode)) {
+        this.steps.push({ node: targetNode, label: transitionLabel || '' });
+      }
+    }
+
+    get label() { return `S${this.id}`; }
+  }
+
+  /**
+   * StateGraph accumulates unique states across traces.
+   * Duplicate configurations are merged — edges point to existing nodes.
+   */
+  class StateGraph {
+    constructor() {
+      this.nodes = [];
+      this.nextId = 1;
+    }
+
+    /** Find an existing node with the same state, or null */
+    findExisting(candidate) {
+      return this.nodes.find(n => n.equals(candidate)) || null;
+    }
+
+    /** Add a node, assigning it an ID. Returns the node. */
+    addNode(node) {
+      node.id = this.nextId++;
+      this.nodes.push(node);
+      return node;
+    }
+
+    /** Build the graph from an ordered list of snapshots. Merges duplicate states. */
+    addTrace(snapshots) {
+      if (snapshots.length === 0) return;
+
+      let prevNode = null;
+      const traceNodes = []; // track which nodes correspond to each snapshot index
+
+      for (const snap of snapshots) {
+        const candidate = new StateNode(0, snap);
+        let node = this.findExisting(candidate);
+        if (!node) {
+          node = this.addNode(candidate);
+        } else {
+          // Update snapshot index reference for navigating
+          candidate.id = node.id;
+        }
+
+        // Store the mapping so we can navigate from trace graph to snapshot
+        // Only set snapshotIndex on first encounter so revisits don't overwrite it
+        if (node.snapshotIndex == null) {
+          node.snapshotIndex = snap.index;
+        }
+        traceNodes.push(node);
+
+        if (prevNode && prevNode !== node) {
+          const transLabel = snap.takenTransition || '';
+          prevNode.addStep(node, transLabel);
+        }
+        prevNode = node;
+      }
+
+      return traceNodes;
+    }
+
+    clear() {
+      this.nodes = [];
+      this.nextId = 1;
+    }
+  }
+
+  /**
+   * Styles for the trace graph (state tree).
+   */
+  const traceGraphStyles = [
+    {
+      selector: 'node',
+      style: {
+        'label': 'data(label)',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'background-color': '#2e7d32',
+        'color': '#fff',
+        'font-size': 14,
+        'width': 50,
+        'height': 50,
+        'border-width': 2,
+        'border-color': '#43a047',
+        'shape': 'ellipse'
+      }
+    },
+    {
+      selector: 'node.stable',
+      style: {
+        'background-color': '#2e7d32',
+        'border-color': '#43a047'
+      }
+    },
+    {
+      selector: 'node.unstable',
+      style: {
+        'background-color': '#c62828',
+        'border-color': '#e53935'
+      }
+    },
+    {
+      selector: 'node.current',
+      style: {
+        'background-color': '#f9a825',
+        'color': '#333',
+        'border-color': '#f57f17',
+        'border-width': 3
+      }
+    },
+    {
+      selector: 'edge',
+      style: {
+        'label': 'data(label)',
+        'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle',
+        'arrow-scale': 1,
+        'font-size': 9,
+        'color': '#b0bec5',
+        'text-background-color': '#0d1520',
+        'text-background-opacity': 0.85,
+        'text-background-padding': '2px',
+        'line-color': '#546e7a',
+        'target-arrow-color': '#546e7a',
+        'width': 1.5
+      }
+    }
+  ];
+
+  /**
+   * Render or update the trace graph in the #trace-cy container.
+   */
+  function renderTraceGraph() {
+    if (!stateGraph || stateGraph.nodes.length === 0) return;
+
+    // Build elements from stateGraph
+    const elements = [];
+    for (const node of stateGraph.nodes) {
+      elements.push({
+        data: {
+          id: `tn_${node.id}`,
+          label: node.label,
+          stateNodeId: node.id,
+          stable: node.stable
+        },
+        classes: node.stable ? 'stable' : 'unstable'
+      });
+
+      for (const step of node.steps) {
+        elements.push({
+          data: {
+            id: `te_${node.id}_${step.node.id}`,
+            source: `tn_${node.id}`,
+            target: `tn_${step.node.id}`,
+            label: step.label
+          }
+        });
+      }
+    }
+
+    if (traceCy) traceCy.destroy();
+
+    // Open panel BEFORE creating Cytoscape so the container has dimensions
+    document.getElementById('trace-panel').classList.add('open');
+
+    const container = document.getElementById('trace-cy');
+    const s1Id = 'tn_1';
+
+    // Single node → preset at center of container; multiple → breadthfirst tree
+    const layoutOpts = stateGraph.nodes.length === 1
+      ? { name: 'preset', positions: function() { return { x: 0, y: 0 }; }, zoom: 1, pan: { x: container.clientWidth / 2, y: container.clientHeight / 2 } }
+      : { name: 'breadthfirst', directed: true, roots: [s1Id], animate: false, avoidOverlap: true, spacingFactor: 1.2, padding: 20 };
+
+    traceCy = cytoscape({
+      container,
+      elements,
+      style: traceGraphStyles,
+      layout: layoutOpts
+    });
+
+    // Click on trace node → show state configuration without highlighting any transition
+    traceCy.on('tap', 'node', e => {
+      const nodeId = e.target.data('stateNodeId');
+      if (nodeId != null) {
+        applyStateNode(nodeId, null);
+      }
+    });
+
+    // Click on trace edge → highlight the target state with the EDGE's transition
+    traceCy.on('tap', 'edge', e => {
+      const targetCyId = e.target.data('target');   // e.g. "tn_3"
+      const transLabel = e.target.data('label');     // e.g. "Mutex/Process1/wait"
+      if (targetCyId) {
+        const targetNodeId = parseInt(targetCyId.replace('tn_', ''), 10);
+        applyStateNode(targetNodeId, transLabel);
+      }
+    });
+
+    // Resize the statechart so it doesn't overflow behind the trace panel
+    if (cy) {
+      setTimeout(() => { cy.resize(); cy.fit(null, 20); }, 50);
+    }
+
+    // Highlight the current step
+    if (traceState && traceState.traceNodes && traceState.traceNodes[traceState.currentStep]) {
+      highlightTraceGraphNode(traceState.traceNodes[traceState.currentStep].id);
+    }
+
+    // Fit/center trace graph
+    if (stateGraph.nodes.length <= 1) {
+      // Single node: no delayed refit needed — preset + pan is immediate
+    } else {
+      setTimeout(() => {
+        if (!traceCy) return;
+        traceCy.resize();
+        traceCy.fit(null, 20);
+        // Cap zoom so nodes don't get oversized for small trees
+        if (traceCy.zoom() > 1) {
+          traceCy.zoom(1);
+          traceCy.center();
+        }
+      }, 100);
+    }
+  }
+
+  /**
+   * Highlight a node in the trace graph by its StateNode id.
+   */
+  function highlightTraceGraphNode(stateNodeId) {
+    if (!traceCy) return;
+    traceCy.nodes().removeClass('current');
+    traceCy.getElementById(`tn_${stateNodeId}`).addClass('current');
+  }
+
+  // ── UI Controls ──
+  function setStatus(text) {
+    document.getElementById('status').textContent = text;
+  }
+
+  function setButtons(enabled) {
+    document.getElementById('btn-fit').disabled = !enabled;
+    document.getElementById('btn-zoom-in').disabled = !enabled;
+    document.getElementById('btn-zoom-out').disabled = !enabled;
+    document.getElementById('btn-export').disabled = !enabled;
+    document.getElementById('btn-simulate').disabled = !enabled;
+  }
+
+  // ── Event Handlers ──
+  document.getElementById('btn-load').addEventListener('click', async () => {
+    const filePath = document.getElementById('file-path').value.trim();
+    if (!filePath) return;
+
+    setStatus('Loading...');
+    document.getElementById('loading').classList.add('active');
+    document.getElementById('btn-load').disabled = true;
+    clearTrace();
+
+    try {
+      const model = await loadModel(filePath);
+      appState.model = model;
+      appState.status = 'exploring';
+      document.getElementById('loading').classList.remove('active');
+      renderGraph(model);
+      setStatus(`Loaded: ${model.rootName} (${model.states.length} states, ${model.transitions.length} transitions)`);
+    } catch (err) {
+      document.getElementById('loading').classList.remove('active');
+      setStatus('Error: ' + err.message);
+      appState.status = 'error';
+    } finally {
+      document.getElementById('btn-load').disabled = false;
+    }
+  });
+
+  document.getElementById('file-path').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btn-load').click();
+  });
+
+  document.getElementById('btn-fit').addEventListener('click', () => cy && cy.fit(null, 30));
+  document.getElementById('btn-zoom-in').addEventListener('click', () => cy && cy.zoom(cy.zoom() * 1.3));
+  document.getElementById('btn-zoom-out').addEventListener('click', () => cy && cy.zoom(cy.zoom() / 1.3));
+  document.getElementById('btn-export').addEventListener('click', () => {
+    if (!cy) return;
+    const png = cy.png({ full: true, scale: 2, bg: '#0f1923' });
+    const a = document.createElement('a');
+    a.href = png;
+    a.download = (appState.model?.rootName || 'graph') + '.png';
+    a.click();
+  });
+  document.getElementById('detail-close').addEventListener('click', clearSelection);
+
+  // Simulate: translate + init (find initial state only)
+  document.getElementById('btn-simulate').addEventListener('click', async () => {
+    if (!appState.model) return;
+
+    setStatus('Translating...');
+    document.getElementById('btn-simulate').disabled = true;
+    clearTrace(); // fresh simulation resets the state graph
+
+    try {
+      await translateModel('traces');
+      setStatus('Finding initial state...');
+      const solution = await initModel();
+      handleInitSolution(solution, appState.model);
+    } catch (err) {
+      setStatus('Simulation error: ' + err.message);
+    } finally {
+      document.getElementById('btn-simulate').disabled = false;
+    }
+  });
+
+  // Step from current state node
+  document.getElementById('btn-step').addEventListener('click', async () => {
+    if (!appState.model || !stateGraph || currentStateNodeId == null) return;
+    const sn = stateGraph.nodes.find(n => n.id === currentStateNodeId);
+    if (!sn) return;
+
+    // Build initState for the step API
+    const initState = {
+      conf: sn.activeStates,
+      vars: {},
+      stable: sn.stable
+    };
+    // Convert var keys from Dash paths (Mutex/semaphore/free) to Alloy field names (Mutex_semaphore_free)
+    for (const [key, val] of Object.entries(sn.vars)) {
+      initState.vars[key.replace(/\//g, '_')] = val;
+    }
+
+    lastStepStartNode = sn; // Remember for Alt
+
+    setStatus(`Stepping from ${sn.label}...`);
+    document.getElementById('btn-step').disabled = true;
+
+    try {
+      const solution = await stepFromState(initState);
+      handleStepSolution(solution, appState.model, sn);
+    } catch (err) {
+      setStatus('Step error: ' + err.message);
+    } finally {
+      document.getElementById('btn-step').disabled = false;
+    }
+  });
+
+  // Alt: find alternate execution path from the last step's starting node
+  document.getElementById('btn-alt').addEventListener('click', async () => {
+    if (!appState.model || !lastStepStartNode) return;
+
+    setStatus(`Finding alternate path from ${lastStepStartNode.label}...`);
+    document.getElementById('btn-alt').disabled = true;
+
+    try {
+      const solution = await nextSolution();
+      handleStepSolution(solution, appState.model, lastStepStartNode);
+    } catch (err) {
+      setStatus('Alt error: ' + err.message);
+    } finally {
+      document.getElementById('btn-alt').disabled = false;
+    }
+  });
+
+  // Timeline step controls
+  document.getElementById('btn-step-first').addEventListener('click', () => applyTraceStep(0));
+  document.getElementById('btn-step-prev').addEventListener('click', () => {
+    if (traceState && traceState.currentStep > 0) applyTraceStep(traceState.currentStep - 1);
+  });
+  document.getElementById('btn-step-next').addEventListener('click', () => {
+    if (traceState && traceState.currentStep < traceState.snapshots.length - 1) applyTraceStep(traceState.currentStep + 1);
+  });
+  document.getElementById('btn-step-last').addEventListener('click', () => {
+    if (traceState) applyTraceStep(traceState.snapshots.length - 1);
+  });
+  document.getElementById('timeline-close').addEventListener('click', clearTrace);
+  document.getElementById('trace-panel-close').addEventListener('click', () => {
+    document.getElementById('trace-panel').classList.remove('open');
+  });
+
+  // Keyboard shortcuts for stepping
+  document.addEventListener('keydown', e => {
+    if (!traceState) return;
+    if (e.target.tagName === 'INPUT') return; // don't capture when typing in input
+    if (e.key === 'ArrowLeft') { e.preventDefault(); document.getElementById('btn-step-prev').click(); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); document.getElementById('btn-step-next').click(); }
+    if (e.key === 'Home') { e.preventDefault(); document.getElementById('btn-step-first').click(); }
+    if (e.key === 'End') { e.preventDefault(); document.getElementById('btn-step-last').click(); }
+  });
+  </script>
+</body>
+</html>

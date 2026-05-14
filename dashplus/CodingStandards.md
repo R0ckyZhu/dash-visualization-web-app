@@ -1,0 +1,52 @@
+# Coding Standards
+
+* use public attributes for any attributes that is get/set only (rather than get/set methods)
+* all attributes of AST nodes should be final
+* AST fields that are List should use Collections.Unmodifiable
+
+## Abbreviations
+
+### General:
+* Expression --> expr/exp
+* Type --> typ
+* Definition --> defn
+* Application --> appl
+* Declaration --> decl
+* Parameter --> param/prm
+* Reference --> ref
+* Variable --> var
+* Visitor --> vis 
+* Ancestor --> ances
+* Assignment --> asn
+* Iterator? --> iter
+* Concurrent --> conc
+* Operand --> op
+* Context --> ctx
+* If-Then-Else --> ite
+* Comprehension --> cph
+* Command --> cmd
+* Override --> ovrd
+* range --> rng
+* domain --> dom
+
+### Domain-specific:
+
+* Fully Qualified Name --> FQN
+* Temporal Logic of Actions (TLA+) --> Tla
+* Resolved --> R
+* Parsed --> P
+
+
+
+Use the abbreviated form everywhere in the code, to keep names short and readable. If a new abbreviation is added, update this list.
+
+## Naming
+* Directory names: All lowercase and avoid underscores
+* Class and .java file names: UpperCamelCase
+* Method and variable names: lowerCamelCase 
+
+## Importing
+* Import utils files like so to avoid cluttering code:
+    - `import static ca.uwaterloo.watform.utils.GeneralUtil.*;`
+    - `extractOneFromList(...)` instead of `GeneralUtil.extractOneFromList(...)`
+

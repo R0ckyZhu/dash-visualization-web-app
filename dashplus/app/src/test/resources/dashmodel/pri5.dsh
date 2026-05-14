@@ -1,0 +1,18 @@
+sig AID, BID {}
+one sig b1,b3,b6 extends BID {}
+one sig a2, a1,a5 extends AID {}
+
+
+state Root {
+	conc A [AID] {
+		conc B [BID] {}
+	}
+	trans t1 {
+		from A [a1]
+		goto B [a1,b1]
+	}
+	trans t2 {
+		from B [a2,b3]
+		goto B [a5, b6]
+	}
+}
