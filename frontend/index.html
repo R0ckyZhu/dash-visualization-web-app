@@ -50,17 +50,16 @@
     #timeline-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
     #timeline-header h4 { color: #4fc3f7; font-size: 13px; margin: 0; }
     #timeline-close { background: none; border: none; color: #78909c; cursor: pointer; font-size: 14px; padding: 2px 6px; }
-    #timeline-controls { display: flex; align-items: center; gap: 8px; }
-    #timeline-controls button { padding: 4px 10px; background: #1e3a5f; border: 1px solid #2a4a6b; border-radius: 3px; color: #e0e0e0; cursor: pointer; font-size: 12px; }
-    #timeline-controls button:hover { background: #2a4a6b; }
-    #timeline-controls button:disabled { opacity: 0.4; cursor: default; }
-    #step-label { font-size: 13px; color: #e0e0e0; min-width: 80px; text-align: center; }
-    #timeline-dots { display: flex; gap: 4px; align-items: center; margin-left: 12px; }
-    .step-dot { width: 12px; height: 12px; border-radius: 50%; background: #2a4a6b; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
-    .step-dot:hover { background: #4fc3f7; }
-    .step-dot.active { background: #4fc3f7; border-color: #81d4fa; }
-    .step-dot.unstable { background: #5c3a1e; }
-    .step-dot.unstable.active { background: #ff9800; border-color: #ffb74d; }
+    #trace-path { display: flex; align-items: center; overflow-x: auto; padding: 4px 0; gap: 2px; scrollbar-width: thin; scrollbar-color: #2a4a6b transparent; }
+    #trace-path::-webkit-scrollbar { height: 4px; }
+    #trace-path::-webkit-scrollbar-thumb { background: #2a4a6b; border-radius: 2px; }
+    .trace-chip { padding: 3px 10px; background: #1e3a5f; border: 1px solid #2a4a6b; border-radius: 12px; color: #e0e0e0; cursor: pointer; font-size: 12px; font-weight: 600; flex-shrink: 0; transition: all 0.15s; }
+    .trace-chip:hover { background: #2a4a6b; border-color: #4fc3f7; }
+    .trace-chip.active { background: #f9a825; color: #333; border-color: #f57f17; }
+    .trace-chip.unstable { border-color: #e65100; }
+    .trace-chip.unstable.active { background: #ff9800; color: #333; border-color: #e65100; }
+    .trace-sep { color: #546e7a; font-size: 10px; padding: 0 4px; flex-shrink: 0; white-space: nowrap; }
+    .trace-sep .trans-name { color: #78909c; font-size: 9px; }
     #timeline-info { display: flex; gap: 24px; margin-top: 6px; font-size: 12px; color: #b0bec5; }
     #timeline-info .info-section { display: flex; gap: 6px; }
     #timeline-info .info-label { color: #78909c; }
@@ -72,6 +71,16 @@
     #trace-panel-header h4 { color: #4fc3f7; font-size: 13px; margin: 0; }
     #trace-panel-close { background: none; border: none; color: #78909c; cursor: pointer; font-size: 14px; padding: 2px 6px; }
     #trace-cy { flex: 1; min-height: 200px; }
+
+    /* Solver info popup (right-click on state tree node) */
+    #solver-info-popup { display: none; position: fixed; z-index: 1000; background: #1a2a3a; border: 1px solid #4fc3f7; border-radius: 6px; padding: 12px 16px; max-width: 440px; max-height: 340px; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.5); scrollbar-width: thin; scrollbar-color: #2a4a6b transparent; }
+    #solver-info-popup.open { display: block; }
+    #solver-info-popup h5 { color: #4fc3f7; margin: 0 0 8px 0; font-size: 13px; font-weight: 600; }
+    #solver-info-popup pre { margin: 0; font-family: 'Consolas', 'Monaco', monospace; font-size: 11px; color: #b0bec5; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+    #solver-info-popup .si-section { color: #78909c; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; margin-bottom: 2px; }
+    #solver-info-popup .si-val { color: #e0e0e0; }
+    #solver-info-popup .si-highlight { color: #00e676; }
+    #solver-info-popup .si-dim { color: #546e7a; }
 
     /* Loading overlay */
     #loading { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4fc3f7; font-size: 16px; }
@@ -112,22 +121,16 @@
   <div id="timeline">
     <div id="timeline-header">
       <h4>Trace</h4>
-      <div id="timeline-dots"></div>
       <button id="timeline-close">&times;</button>
     </div>
-    <div id="timeline-controls">
-      <button id="btn-step-first">&laquo;</button>
-      <button id="btn-step-prev">&lsaquo; Prev</button>
-      <span id="step-label">Step 0 / 0</span>
-      <button id="btn-step-next">Next &rsaquo;</button>
-      <button id="btn-step-last">&raquo;</button>
-    </div>
+    <div id="trace-path"></div>
     <div id="timeline-info">
       <div class="info-section"><span class="info-label">Transition:</span> <span id="info-transition">—</span></div>
       <div class="info-section"><span class="info-label">Stable:</span> <span id="info-stable">—</span></div>
       <div class="info-section"><span class="info-label">Variables:</span> <span id="info-vars">—</span></div>
     </div>
   </div>
+  <div id="solver-info-popup"></div>
 
   <script>
   // ── Register extensions ──
@@ -144,6 +147,7 @@
   let traceState = null; // { snapshots, currentStep }
   let stateGraph = null; // StateGraph instance
   let traceNodePositions = {};  // { nodeId: {x, y} } — fixed positions for state tree nodes
+  let tracePath = [];              // [{nodeId, transition}] — linear trace for bottom bar
 
   // ── API Client ──
   const API = 'http://127.0.0.1:8000';
@@ -863,6 +867,57 @@
   }
 
   /**
+   * Build a formatted solver output string for a snapshot.
+   * Stored on StateNodes so it can be shown on right-click.
+   */
+  function buildSolverInfo(snapshot, solution) {
+    const lines = [];
+
+    lines.push(`Snapshot atom: ${snapshot.id}`);
+    lines.push(`Index in trace: ${snapshot.index}`);
+    lines.push('');
+
+    lines.push('Configuration:');
+    for (const s of [...snapshot.activeStates].sort()) {
+      lines.push(`  ${s}`);
+    }
+    lines.push('');
+
+    lines.push(`Transition: ${snapshot.takenTransition || '—'}`);
+    lines.push(`Stable: ${snapshot.stable}`);
+    lines.push('');
+
+    const varEntries = Object.entries(snapshot.vars);
+    if (varEntries.length > 0) {
+      lines.push('Variables:');
+      for (const [k, v] of varEntries) {
+        lines.push(`  ${k} = ${v}`);
+      }
+    } else {
+      lines.push('Variables: —');
+    }
+
+    // Include raw solver relations that reference this snapshot
+    if (solution && solution.relations) {
+      lines.push('');
+      lines.push('─── Raw Relations ───');
+      const snapAtom = snapshot.id;
+      for (const [relName, tuples] of Object.entries(solution.relations)) {
+        const relevant = tuples.filter(t => t[0] === snapAtom);
+        if (relevant.length > 0) {
+          const shortName = relName.replace('this/', '');
+          lines.push(`${shortName}:`);
+          for (const tuple of relevant) {
+            lines.push(`  ${tuple.slice(1).join(' → ')}`);
+          }
+        }
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
    * Apply highlighting from a StateNode (used when clicking trace graph nodes).
    * Uses the StateNode's own data rather than looking up a snapshot by index.
    */
@@ -928,10 +983,9 @@
       ? varEntries.map(([k, v]) => `${k.split('/').pop()}=${v}`).join(', ')
       : '—';
 
-    document.getElementById('step-label').textContent = sn.label;
-
-    // Highlight the node in the trace graph
+    // Highlight the node in the trace graph and trace path
     highlightTraceGraphNode(stateNodeId);
+    updateTraceHighlight();
   }
 
   /**
@@ -989,13 +1043,6 @@
   function updateTimelineUI(stepIdx) {
     if (!traceState) return;
     const snap = traceState.snapshots[stepIdx];
-    const total = traceState.snapshots.length;
-
-    document.getElementById('step-label').textContent = `Step ${stepIdx} / ${total - 1}`;
-    document.getElementById('btn-step-prev').disabled = stepIdx <= 0;
-    document.getElementById('btn-step-first').disabled = stepIdx <= 0;
-    document.getElementById('btn-step-next').disabled = stepIdx >= total - 1;
-    document.getElementById('btn-step-last').disabled = stepIdx >= total - 1;
 
     // Transition info
     const transEl = document.getElementById('info-transition');
@@ -1021,27 +1068,7 @@
       varsEl.textContent = '—';
     }
 
-    // Update dots
-    const dots = document.querySelectorAll('.step-dot');
-    dots.forEach((dot, i) => {
-      dot.classList.toggle('active', i === stepIdx);
-    });
-  }
-
-  /**
-   * Build the timeline dot indicators.
-   */
-  function buildTimelineDots(snapshots) {
-    const container = document.getElementById('timeline-dots');
-    container.innerHTML = '';
-    snapshots.forEach((snap, i) => {
-      const dot = document.createElement('div');
-      dot.className = 'step-dot' + (snap.stable ? '' : ' unstable');
-      if (i === 0) dot.classList.add('active');
-      dot.title = `Step ${i}` + (snap.stable ? '' : ' (unstable)');
-      dot.addEventListener('click', () => applyTraceStep(i));
-      container.appendChild(dot);
-    });
+    updateTraceHighlight();
   }
 
   /**
@@ -1054,6 +1081,7 @@
     if (cy) {
       cy.elements().removeClass('trace-active trace-inactive trace-taken');
     }
+    tracePath = [];
     if (traceCy) { traceCy.destroy(); traceCy = null; }
     document.getElementById('timeline').classList.remove('open');
     document.getElementById('trace-panel').classList.remove('open');
@@ -1087,10 +1115,22 @@
     if (!stateGraph) stateGraph = new StateGraph();
     const traceNodes = stateGraph.addTrace(snapshots);
 
+    // Set solver info on newly created nodes
+    for (let i = 0; i < traceNodes.length; i++) {
+      if (!traceNodes[i].solverInfo) {
+        traceNodes[i].solverInfo = buildSolverInfo(snapshots[i], solution);
+      }
+    }
+
     traceState = { snapshots, currentStep: 0, traceNodes };
 
-    // Build timeline UI
-    buildTimelineDots(snapshots);
+    // Build trace path from traceNodes
+    tracePath = traceNodes.map((tn, i) => ({
+      nodeId: tn.id,
+      transition: snapshots[i] ? snapshots[i].takenTransition : null
+    }));
+    updateTracePath();
+
     document.getElementById('timeline').classList.add('open');
     document.getElementById('btn-alt').disabled = false;
 
@@ -1123,12 +1163,15 @@
     stateGraph = new StateGraph();
     const snap = snapshots[0];
     const node = stateGraph.addNode(new StateNode(0, snap));
+    node.solverInfo = buildSolverInfo(snap, solution);
 
     // Set up state tracking
     currentStateNodeId = node.id;
     lastStepStartNode = null; // no step taken yet
 
     // Show timeline and enable Step
+    tracePath = [{ nodeId: node.id, transition: null }];
+    updateTracePath();
     document.getElementById('timeline').classList.add('open');
     document.getElementById('btn-alt').disabled = true;
     document.getElementById('btn-step').disabled = false;
@@ -1162,20 +1205,32 @@
     // Add the remaining snapshots as new nodes/edges from startNode.
     const newSnapshots = snapshots.slice(1);
 
+    // Truncate the trace path back to startNode (removes the previous
+    // step/alt result so Alt replaces rather than appends).
+    const startIdx = tracePath.map(e => e.nodeId).lastIndexOf(startNode.id);
+    if (startIdx >= 0) {
+      tracePath = tracePath.slice(0, startIdx + 1);
+    }
+
     let lastNode = null;
     for (const snap of newSnapshots) {
       const candidate = new StateNode(0, snap);
       let existingNode = stateGraph.findExisting(candidate);
       if (!existingNode) {
         existingNode = stateGraph.addNode(candidate);
+        existingNode.solverInfo = buildSolverInfo(snap, solution);
       }
       // Add edge from startNode to this node
       const transLabel = snap.takenTransition || '';
       startNode.addStep(existingNode, transLabel);
       lastNode = existingNode;
+
+      // Extend the trace path
+      tracePath.push({ nodeId: existingNode.id, transition: snap.takenTransition || null });
     }
 
-    // Re-render the trace graph
+    // Update trace path and re-render the state tree
+    updateTracePath();
     renderTraceGraph();
 
     // Select the NEW node (last discovered), not the start node.
@@ -1211,6 +1266,7 @@
       this.vars = { ...snapshot.vars };
       this.steps = [];                             // outgoing edges: [{node, transitionLabel}]
       this.snapshotIndex = snapshot.index;          // which snapshot this corresponds to
+      this.solverInfo = null;                       // formatted solver output (set on first creation)
     }
 
     /** Two nodes are equal if they have the same active states and variable values */
@@ -1431,6 +1487,15 @@
       }
     });
 
+    // Right-click on trace node → show solver output popup
+    traceCy.on('cxttap', 'node', e => {
+      const stateNodeId = e.target.data('stateNodeId');
+      const sn = stateGraph ? stateGraph.nodes.find(n => n.id === stateNodeId) : null;
+      if (!sn || !sn.solverInfo) return;
+      e.originalEvent.preventDefault();
+      showSolverInfoPopup(sn, e.originalEvent);
+    });
+
     // Resize the statechart so it doesn't overflow behind the trace panel
     if (cy) {
       setTimeout(() => { cy.resize(); cy.fit(null, 20); }, 50);
@@ -1465,6 +1530,113 @@
     if (!traceCy) return;
     traceCy.nodes().removeClass('current');
     traceCy.getElementById(`tn_${stateNodeId}`).addClass('current');
+  }
+
+  // ── Solver Info Popup ──
+  /**
+   * Show the solver output popup for a StateNode near the mouse position.
+   */
+  function showSolverInfoPopup(stateNode, mouseEvent) {
+    const popup = document.getElementById('solver-info-popup');
+    popup.innerHTML = `<h5>${escapeHtml(stateNode.label)} — Solver Output</h5><pre>${escapeHtml(stateNode.solverInfo)}</pre>`;
+
+    // Position near the mouse
+    popup.style.left = mouseEvent.clientX + 10 + 'px';
+    popup.style.top = mouseEvent.clientY + 10 + 'px';
+    popup.classList.add('open');
+
+    // Adjust if it goes off-screen
+    requestAnimationFrame(() => {
+      const rect = popup.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        popup.style.left = Math.max(4, window.innerWidth - rect.width - 10) + 'px';
+      }
+      if (rect.bottom > window.innerHeight) {
+        popup.style.top = Math.max(4, window.innerHeight - rect.height - 10) + 'px';
+      }
+    });
+  }
+
+  function closeSolverInfoPopup() {
+    document.getElementById('solver-info-popup').classList.remove('open');
+  }
+
+  // Click anywhere outside the popup to close it
+  document.addEventListener('mousedown', e => {
+    const popup = document.getElementById('solver-info-popup');
+    if (popup.classList.contains('open') && !popup.contains(e.target)) {
+      closeSolverInfoPopup();
+    }
+  });
+
+  // Prevent browser context menu on the trace graph container
+  document.getElementById('trace-cy').addEventListener('contextmenu', e => {
+    e.preventDefault();
+  });
+
+  // ── Trace Path (bottom bar) ──
+  /**
+   * Rebuild the trace path chips in the bottom bar from the tracePath array.
+   */
+  function updateTracePath() {
+    const container = document.getElementById('trace-path');
+    if (!container) return;
+    container.innerHTML = '';
+
+    tracePath.forEach((entry, i) => {
+      // Arrow + transition label before each chip (except the first)
+      if (i > 0) {
+        const sep = document.createElement('span');
+        sep.className = 'trace-sep';
+        if (entry.transition) {
+          const shortTrans = entry.transition.split('/').pop();
+          sep.innerHTML = `<span class="trans-name">${escapeHtml(shortTrans)}</span> →`;
+        } else {
+          sep.textContent = '→';
+        }
+        container.appendChild(sep);
+      }
+
+      // State chip
+      const chip = document.createElement('span');
+      const sn = stateGraph ? stateGraph.nodes.find(n => n.id === entry.nodeId) : null;
+      chip.className = 'trace-chip';
+      if (sn && !sn.stable) chip.classList.add('unstable');
+      if (entry.nodeId === currentStateNodeId) chip.classList.add('active');
+      chip.textContent = sn ? sn.label : `S${entry.nodeId}`;
+      chip.dataset.traceIndex = i;
+
+      // Tooltip: show the active states in this configuration
+      if (sn) {
+        chip.title = sn.activeStates.map(s => s.split('/').pop()).join(', ');
+      }
+
+      chip.addEventListener('click', () => {
+        applyStateNode(entry.nodeId, entry.transition || null);
+      });
+
+      container.appendChild(chip);
+    });
+
+    // Auto-scroll to the end so the latest state is visible
+    requestAnimationFrame(() => {
+      container.scrollLeft = container.scrollWidth;
+    });
+  }
+
+  /**
+   * Update the active highlight on trace path chips without rebuilding them.
+   */
+  function updateTraceHighlight() {
+    document.querySelectorAll('.trace-chip').forEach(chip => {
+      const idx = parseInt(chip.dataset.traceIndex);
+      const entry = tracePath[idx];
+      if (entry && entry.nodeId === currentStateNodeId) {
+        chip.classList.add('active');
+      } else {
+        chip.classList.remove('active');
+      }
+    });
   }
 
   // ── UI Controls ──
@@ -1592,30 +1764,10 @@
     }
   });
 
-  // Timeline step controls
-  document.getElementById('btn-step-first').addEventListener('click', () => applyTraceStep(0));
-  document.getElementById('btn-step-prev').addEventListener('click', () => {
-    if (traceState && traceState.currentStep > 0) applyTraceStep(traceState.currentStep - 1);
-  });
-  document.getElementById('btn-step-next').addEventListener('click', () => {
-    if (traceState && traceState.currentStep < traceState.snapshots.length - 1) applyTraceStep(traceState.currentStep + 1);
-  });
-  document.getElementById('btn-step-last').addEventListener('click', () => {
-    if (traceState) applyTraceStep(traceState.snapshots.length - 1);
-  });
+  // Timeline controls
   document.getElementById('timeline-close').addEventListener('click', clearTrace);
   document.getElementById('trace-panel-close').addEventListener('click', () => {
     document.getElementById('trace-panel').classList.remove('open');
-  });
-
-  // Keyboard shortcuts for stepping
-  document.addEventListener('keydown', e => {
-    if (!traceState) return;
-    if (e.target.tagName === 'INPUT') return; // don't capture when typing in input
-    if (e.key === 'ArrowLeft') { e.preventDefault(); document.getElementById('btn-step-prev').click(); }
-    if (e.key === 'ArrowRight') { e.preventDefault(); document.getElementById('btn-step-next').click(); }
-    if (e.key === 'Home') { e.preventDefault(); document.getElementById('btn-step-first').click(); }
-    if (e.key === 'End') { e.preventDefault(); document.getElementById('btn-step-last').click(); }
   });
   </script>
 </body>
