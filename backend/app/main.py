@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .java_bridge import JavaBridge
-from .models import ExecuteRequest, LoadRequest, StepRequest, TranslateRequest
+from .models import ExecuteRequest, InitRequest, InspectRequest, LoadRequest, StepRequest, TranslateRequest
 from .session import SessionManager
 
 logging.basicConfig(level=logging.INFO)
@@ -59,6 +59,15 @@ async def load_model(req: LoadRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/inspect")
+async def inspect_model(req: InspectRequest):
+    try:
+        data = await session.inspect_file(req.filePath)
+        return data
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/api/model")
 async def get_model():
     model = session.get_model()
@@ -86,9 +95,10 @@ async def execute_command(req: ExecuteRequest):
 
 
 @app.post("/api/init")
-async def init_model():
+async def init_model(req: InitRequest = None):
     try:
-        data = await session.init()
+        sig_scopes = req.sigScopes if req else {}
+        data = await session.init(sig_scopes=sig_scopes or None)
         return data
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -106,7 +116,10 @@ async def next_solution():
 @app.post("/api/step")
 async def step(req: StepRequest):
     try:
-        data = await session.step(req.initState, req.maxScope)
+        state = req.state if req.state is not None else req.initState
+        if state is None:
+            raise HTTPException(status_code=422, detail="Missing state")
+        data = await session.step(state, sig_scopes=req.sigScopes or None)
         return data
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))

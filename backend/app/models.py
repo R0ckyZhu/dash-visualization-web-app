@@ -5,6 +5,10 @@ class LoadRequest(BaseModel):
     filePath: str
 
 
+class InspectRequest(BaseModel):
+    filePath: str
+
+
 class DashParam(BaseModel):
     stateName: str
     paramSig: str
@@ -69,6 +73,11 @@ class ExecuteRequest(BaseModel):
     cmdIdx: int = -1
 
 
+class InitRequest(BaseModel):
+    sigScopes: dict[str, int] = {}
+
+
 class StepRequest(BaseModel):
-    initState: dict
-    maxScope: int = 10
+    state: dict | None = None
+    initState: dict | None = None
+    sigScopes: dict[str, int] = {}

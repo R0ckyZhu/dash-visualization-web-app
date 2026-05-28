@@ -82,6 +82,24 @@
     #solver-info-popup .si-highlight { color: #00e676; }
     #solver-info-popup .si-dim { color: #546e7a; }
 
+    /* Scope config panel (shown before simulation for parameterized models) */
+    #scope-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; }
+    #scope-overlay.open { display: flex; }
+    #scope-dialog { background: #16213e; border: 1px solid #4fc3f7; border-radius: 8px; padding: 20px 24px; min-width: 320px; max-width: 420px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+    #scope-dialog h3 { color: #4fc3f7; font-size: 15px; margin: 0 0 6px 0; }
+    #scope-dialog .scope-desc { color: #78909c; font-size: 12px; margin-bottom: 14px; }
+    .scope-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1e3a5f; }
+    .scope-row:last-child { border-bottom: none; }
+    .scope-sig-name { font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; color: #e0e0e0; }
+    .scope-input { width: 60px; padding: 4px 8px; background: #0f1923; border: 1px solid #2a4a6b; border-radius: 4px; color: #e0e0e0; font-size: 13px; text-align: center; }
+    .scope-input:focus { outline: none; border-color: #4fc3f7; }
+    #scope-dialog .scope-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    #scope-dialog button { padding: 6px 16px; border-radius: 4px; border: 1px solid #2a4a6b; cursor: pointer; font-size: 13px; }
+    #scope-dialog .btn-run { background: #1b5e20; border-color: #2e7d32; color: #e0e0e0; }
+    #scope-dialog .btn-run:hover { background: #2e7d32; }
+    #scope-dialog .btn-cancel { background: #1e3a5f; color: #e0e0e0; }
+    #scope-dialog .btn-cancel:hover { background: #2a4a6b; }
+
     /* Loading overlay */
     #loading { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4fc3f7; font-size: 16px; }
     #loading.active { display: block; }
@@ -131,6 +149,17 @@
     </div>
   </div>
   <div id="solver-info-popup"></div>
+  <div id="scope-overlay">
+    <div id="scope-dialog">
+      <h3>Sig Scopes</h3>
+      <div class="scope-desc">Set the number of atoms for each type used in the model.</div>
+      <div id="scope-rows"></div>
+      <div class="scope-actions">
+        <button class="btn-cancel" id="scope-cancel">Cancel</button>
+        <button class="btn-run" id="scope-run">Run Simulation</button>
+      </div>
+    </div>
+  </div>
 
   <script>
   // ── Register extensions ──
@@ -139,7 +168,11 @@
   }
 
   // ── Types & State ──
-  let appState = { status: 'idle', model: null, selectedNode: null, selectedEdge: null };
+  // appState.model is the *visualization* model (parameterized states expanded into
+  // per-instance copies, e.g. Elevator → Elevator[PID_0], Elevator[PID_1]).
+  // appState.rawModel is the original from the backend (kept so we can re-expand
+  // whenever the user changes scopes).
+  let appState = { status: 'idle', model: null, rawModel: null, selectedNode: null, selectedEdge: null };
   let currentStateNodeId = null; // tracks which StateNode is selected for stepping
   let lastStepStartNode = null; // tracks starting node for Alt (alternate path)
   let cy = null;
@@ -148,9 +181,24 @@
   let stateGraph = null; // StateGraph instance
   let traceNodePositions = {};  // { nodeId: {x, y} } — fixed positions for state tree nodes
   let tracePath = [];              // [{nodeId, transition}] — linear trace for bottom bar
+  let currentSigScopes = {};       // {PID: 3, Floor: 4} — user-configured sig scopes for simulation
+  let currentScopeSigs = [];       // ["PID", "Floor"] — sigs that need scopes (from translate)
 
   // ── API Client ──
   const API = 'http://127.0.0.1:8000';
+
+  async function inspectModel(filePath) {
+    const resp = await fetch(`${API}/api/inspect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath })
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to inspect model');
+    }
+    return resp.json();
+  }
 
   async function loadModel(filePath) {
     const resp = await fetch(`${API}/api/load`, {
@@ -178,8 +226,12 @@
     return resp.json();
   }
 
-  async function initModel() {
-    const resp = await fetch(`${API}/api/init`, { method: 'POST' });
+  async function initModel(sigScopes = {}) {
+    const resp = await fetch(`${API}/api/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sigScopes })
+    });
     if (!resp.ok) {
       const err = await resp.json();
       throw new Error(err.detail || 'Failed to initialize');
@@ -209,17 +261,186 @@
     return resp.json();
   }
 
-  async function stepFromState(initState) {
+  async function stepFromState(state, sigScopes = {}) {
     const resp = await fetch(`${API}/api/step`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initState, maxScope: 10 })
+      body: JSON.stringify({ state, sigScopes })
     });
     if (!resp.ok) {
       const err = await resp.json();
       throw new Error(err.detail || 'Failed to step');
     }
     return resp.json();
+  }
+
+  // ── Parameterized Model Expansion ──
+  // When a model has parameterized states (e.g., `conc Elevator [PID]`) and the user
+  // has set scopes (PID=2), we duplicate the parameterized subtree for each instance,
+  // producing Elevator[PID$0] and Elevator[PID$1] with their own internal states.
+
+  /**
+   * Expand parameterized states into per-instance copies.
+   * Returns a new model object with expanded states and transitions.
+   * Also builds a mapping from Alloy atoms to expanded Dash IDs.
+   *
+   * @param {object} model — the original DashModel from the backend
+   * @param {object} sigScopes — e.g., {PID: 2, Floor: 3}
+   * @returns {object} — { model: expandedModel, paramInstances: {paramSig: [atom0, atom1, ...]} }
+   */
+  function expandParameterizedModel(model, sigScopes) {
+    if (!sigScopes || Object.keys(sigScopes).length === 0) {
+      return { model, paramInstances: {} };
+    }
+
+    // Identify which states are parameterized and by which sig
+    // params: [{stateName: "System/Elevator", paramSig: "PID"}]
+    const paramRoots = new Map(); // paramSig → root state ID (e.g., "PID" → "System/Elevator")
+    for (const state of model.states) {
+      for (const p of (state.params || [])) {
+        if (!paramRoots.has(p.paramSig)) {
+          paramRoots.set(p.paramSig, p.stateName);
+        }
+      }
+    }
+
+    // If no parameterized states, return as-is
+    if (paramRoots.size === 0) {
+      return { model, paramInstances: {} };
+    }
+
+    // Build concrete sig instance names: PID → ["PID_0", "PID_1"]
+    // Matches the concrete subsigs injected by the backend (one sig PID_0, PID_1 extends PID {})
+    const paramInstances = {};
+    for (const [sig, count] of Object.entries(sigScopes)) {
+      if (paramRoots.has(sig)) {
+        paramInstances[sig] = [];
+        for (let i = 0; i < count; i++) {
+          paramInstances[sig].push(`${sig}_${i}`);
+        }
+      }
+    }
+
+    // Determine which state IDs are parameterized (belong to a param subtree)
+    const paramStateIds = new Set();
+    for (const state of model.states) {
+      if (state.params && state.params.length > 0) {
+        paramStateIds.add(state.id);
+      }
+    }
+
+    // Determine which transition IDs are parameterized
+    const paramTransIds = new Set();
+    for (const t of model.transitions) {
+      if (paramStateIds.has(t.from) || paramStateIds.has(t.to)) {
+        paramTransIds.add(t.id);
+      }
+    }
+
+    // Build expanded model
+    const expandedStates = [];
+    const expandedTransitions = [];
+
+    // Build a child-rewriter for non-parameterized parents: each child that is the
+    // ROOT of a parameterized subtree gets replaced by the per-instance copies, so
+    // the parent's children list reflects what the user actually sees in the graph.
+    // Children deeper inside a parameterized subtree are not direct children of any
+    // non-parameterized state, so they don't need rewriting here.
+    const paramRootIds = new Set(paramRoots.values()); // e.g., "System/Elevator"
+    const expandChildList = (childIds) => {
+      const out = [];
+      for (const childId of childIds) {
+        if (paramRootIds.has(childId)) {
+          // Find which sig parameterizes this root and emit one entry per instance
+          for (const [sig, rootId] of paramRoots) {
+            if (rootId === childId) {
+              const instances = paramInstances[sig] || [];
+              for (const inst of instances) out.push(childId + `[${inst}]`);
+              break;
+            }
+          }
+        } else {
+          out.push(childId);
+        }
+      }
+      return out;
+    };
+
+    // Add non-parameterized states (rewriting their children to point at the
+    // per-instance copies of any parameterized subtree they contain)
+    for (const state of model.states) {
+      if (!paramStateIds.has(state.id)) {
+        expandedStates.push({
+          ...state,
+          children: expandChildList(state.children)
+        });
+      }
+    }
+
+    // Add non-parameterized transitions as-is
+    for (const t of model.transitions) {
+      if (!paramTransIds.has(t.id)) {
+        expandedTransitions.push({ ...t });
+      }
+    }
+
+    // For each param sig, duplicate the parameterized subtree per instance
+    for (const [sig, rootStateId] of paramRoots) {
+      const instances = paramInstances[sig] || [`${sig}$0`];
+
+      for (const instanceAtom of instances) {
+        const suffix = `[${instanceAtom}]`;
+
+        // Rewrite state ID: System/Elevator → System/Elevator[PID$0]
+        const rewriteId = (id) => {
+          if (!paramStateIds.has(id)) return id;
+          return id + suffix;
+        };
+
+        // Duplicate parameterized states
+        for (const state of model.states) {
+          if (!paramStateIds.has(state.id)) continue;
+
+          // Root of the parameterized subtree: parent is NOT itself parameterized.
+          // It's the only node that needs an explicit "[PID_0]" label badge.
+          const isParamRoot = state.id === rootStateId;
+
+          expandedStates.push({
+            ...state,
+            id: state.id + suffix,
+            parent: state.parent ? rewriteId(state.parent) : state.parent,
+            children: state.children.map(c => rewriteId(c)),
+            // Store the instance atom for trace mapping
+            _paramInstance: instanceAtom,
+            _originalId: state.id,
+            _isParamRoot: isParamRoot
+          });
+        }
+
+        // Duplicate parameterized transitions
+        for (const t of model.transitions) {
+          if (!paramTransIds.has(t.id)) continue;
+
+          expandedTransitions.push({
+            ...t,
+            id: t.id + suffix,
+            from: t.from ? rewriteId(t.from) : t.from,
+            to: t.to ? rewriteId(t.to) : t.to,
+            _paramInstance: instanceAtom,
+            _originalId: t.id
+          });
+        }
+      }
+    }
+
+    const expandedModel = {
+      ...model,
+      states: expandedStates,
+      transitions: expandedTransitions,
+      _paramInstances: paramInstances
+    };
+
+    return { model: expandedModel, paramInstances };
   }
 
   // ── Model → Cytoscape Elements ──
@@ -237,7 +458,17 @@
       else if (state.isDefault) classes = 'default-state';
       else classes = 'state';
 
-      const label = state.id.split('/').pop();
+      // For expanded parameterized states, label the *root* of the per-instance
+      // subtree as "Elevator[PID_0]" so it's clear which copy you're looking at.
+      // Deeper states inside the subtree just use their plain segment name
+      // ("Idle", "Moving") — the surrounding compound already identifies the copy.
+      let label = state.id.split('/').pop();
+      if (state._paramInstance && state._originalId) {
+        const origLabel = state._originalId.split('/').pop();
+        label = state._isParamRoot
+          ? origLabel + '[' + state._paramInstance + ']'
+          : origLabel;
+      }
       const node = {
         data: { id: state.id, label, kind: state.kind, fullData: state },
         classes
@@ -758,19 +989,42 @@
    * Strategy: for each state/transition in the model, compute the underscore form
    * and map it back.
    */
+  /**
+   * Build mappings from Alloy atom names to Dash model IDs.
+   * For expanded parameterized models, also builds per-instance mappings:
+   *   atomToState: "System_Elevator_Idle" → "System/Elevator/Idle" (original, non-param or fallback)
+   *   paramAtomToState: {"PID_0": {"System_Elevator_Idle": "System/Elevator/Idle[PID_0]"}, ...}
+   */
   function buildAtomMappings(model) {
-    const atomToState = {};      // "Mutex_Process1_NonCritical" → "Mutex/Process1/NonCritical"
-    const atomToTransition = {}; // "Mutex_Process1_wait" → "Mutex/Process1/wait"
+    const atomToState = {};
+    const atomToTransition = {};
+    const paramAtomToState = {};      // instanceAtom → {alloyAtom → expandedDashId}
+    const paramAtomToTransition = {}; // instanceAtom → {alloyAtom → expandedDashId}
 
     for (const s of model.states) {
-      const atom = s.id.replace(/\//g, '_');
-      atomToState[atom] = s.id;
+      if (s._paramInstance && s._originalId) {
+        // Expanded parameterized state
+        const atom = s._originalId.replace(/\//g, '_');
+        const inst = s._paramInstance;
+        if (!paramAtomToState[inst]) paramAtomToState[inst] = {};
+        paramAtomToState[inst][atom] = s.id;
+      } else {
+        const atom = s.id.replace(/\//g, '_');
+        atomToState[atom] = s.id;
+      }
     }
     for (const t of model.transitions) {
-      const atom = t.id.replace(/\//g, '_');
-      atomToTransition[atom] = t.id;
+      if (t._paramInstance && t._originalId) {
+        const atom = t._originalId.replace(/\//g, '_');
+        const inst = t._paramInstance;
+        if (!paramAtomToTransition[inst]) paramAtomToTransition[inst] = {};
+        paramAtomToTransition[inst][atom] = t.id;
+      } else {
+        const atom = t.id.replace(/\//g, '_');
+        atomToTransition[atom] = t.id;
+      }
     }
-    return { atomToState, atomToTransition };
+    return { atomToState, atomToTransition, paramAtomToState, paramAtomToTransition };
   }
 
   /**
@@ -781,12 +1035,109 @@
   }
 
   /**
+   * Display an Alloy atom with a readable subscript index.
+   * "Floor$0" → "Floor₀", "Up$0" → "Up₀", "Floor$12" → "Floor₁₂"
+   */
+  function displayAtom(atom) {
+    const m = String(atom).match(/^(.+)\$(\d+)$/);
+    if (!m) return String(atom);
+    const [, name, idx] = m;
+    const sub = '₀₁₂₃₄₅₆₇₈₉';
+    return name + idx.split('').map(d => sub[parseInt(d)] || d).join('');
+  }
+
+  /**
    * Parse an Alloy solution into an ordered list of snapshots.
    * Each snapshot: { id, activeStates: [stateId, ...], takenTransition: transId|null, stable: bool, vars: {name: value} }
    */
   function parseSolution(solution, model) {
+    if (solution.snapshots) {
+      const rawSnapshots = solution.snapshots || [];
+      const { atomToState, atomToTransition, paramAtomToState, paramAtomToTransition } = buildAtomMappings(model);
+      const normalizeAtom = atom => stripAtomSuffix(String(atom || '').replace(/^this\//, ''));
+      const splitTuple = value => String(value).split('->').map(normalizeAtom).filter(Boolean);
+      const mapStateAtom = atom => atomToState[normalizeAtom(atom)] || null;
+      const mapTransitionAtom = atom => atomToTransition[normalizeAtom(atom)] || null;
+      // For parameterized conf/taken entries like "PID_1->Elevator_Idle", look up the
+      // expanded per-instance node ID using the leading atom(s) as the instance key.
+      // Returns null if not a parameterized entry or the instance isn't recognized.
+      const mapParamAtom = (atoms, table) => {
+        if (atoms.length < 2) return null;
+        const inst = atoms[0]; // single-level param; multi-level would need a join
+        const target = atoms[atoms.length - 1];
+        return (table[inst] && table[inst][target]) || null;
+      };
+      const isConfField = key => /(^|_|\.)_*conf\d*$/i.test(key);
+      const isTakenField = key => /taken\d*$/i.test(key);
+      const isStableField = key => /stable$/i.test(key);
+      const hiddenField = key => isConfField(key) || isTakenField(key) || isStableField(key) || /sc_used/i.test(key);
+
+      return rawSnapshots.map((raw, idx) => {
+        const activeStates = [];
+        let takenTransition = null;
+        let stable = true;
+        const vars = {};
+
+        for (const [field, values] of Object.entries(raw)) {
+          const arr = Array.isArray(values) ? values : [];
+
+          if (isConfField(field)) {
+            for (const value of arr) {
+              const atoms = splitTuple(value);
+              // Try parameterized first; fall back to the non-parameterized atom map.
+              // For "PID_1->Elevator_Idle" this yields "System/Elevator/Idle[PID_1]".
+              const stateId = mapParamAtom(atoms, paramAtomToState)
+                || mapStateAtom(atoms[atoms.length - 1]);
+              if (stateId && !activeStates.includes(stateId)) activeStates.push(stateId);
+            }
+            continue;
+          }
+
+          if (isTakenField(field)) {
+            for (const value of arr) {
+              const atoms = splitTuple(value);
+              const transId = mapParamAtom(atoms, paramAtomToTransition)
+                || mapTransitionAtom(atoms[atoms.length - 1]);
+              if (transId) {
+                takenTransition = transId;
+                break;
+              }
+            }
+            continue;
+          }
+
+          if (isStableField(field)) {
+            stable = arr.some(v => /true/i.test(String(v)));
+            continue;
+          }
+
+          if (!hiddenField(field)) {
+            vars[field.replace(/_/g, '/')] = arr.map(value => {
+              const atoms = splitTuple(value).map(atom => {
+                if (atom === 'boolean/True') return 'true';
+                if (atom === 'boolean/False') return 'false';
+                return atom;
+              });
+              return atoms.length <= 1 ? atoms[0] : atoms;
+            }).filter(value => value !== undefined);
+          }
+        }
+
+        return {
+          id: `Snapshot${idx}`,
+          index: idx,
+          rawState: raw,
+          activeStates,
+          takenTransition,
+          stable,
+          vars
+        };
+      });
+    }
+
     const rels = solution.relations;
-    const { atomToState, atomToTransition } = buildAtomMappings(model);
+    const { atomToState, atomToTransition, paramAtomToState, paramAtomToTransition } = buildAtomMappings(model);
+    const paramInstances = model._paramInstances || {}; // {PID: ["PID$0","PID$1"]}
 
     // 1. Build snapshot ordering
     const firstSnap = rels['__Snapshot/Ord.First']?.[0]?.[0];
@@ -806,6 +1157,8 @@
     if (snapshotOrder.length === 0) return [];
 
     // 2. Parse conf (active states per snapshot)
+    // __conf0: [snapshot, stateAtom] — non-parameterized states
+    // __conf1: [snapshot, paramInstanceAtom, stateAtom] — parameterized states per instance
     const confMap = {}; // snapAtom → [stateId, ...]
     for (const [snap, stateAtom] of (rels['this/__Snapshot.__conf0'] || [])) {
       if (!confMap[snap]) confMap[snap] = [];
@@ -813,12 +1166,35 @@
       const stateId = atomToState[stateKey];
       if (stateId) confMap[snap].push(stateId);
     }
+    // Parse conf1 for parameterized instances
+    for (const tuple of (rels['this/__Snapshot.__conf1'] || [])) {
+      if (tuple.length < 3) continue;
+      const [snap, instanceAtom, stateAtom] = tuple;
+      if (!confMap[snap]) confMap[snap] = [];
+      const stateKey = stripAtomSuffix(stateAtom);
+      const instKey = stripAtomSuffix(instanceAtom); // e.g., "PID_0$0" → "PID_0"
+      // Look up in paramAtomToState for this instance
+      const instMap = paramAtomToState[instKey];
+      const stateId = instMap ? instMap[stateKey] : null;
+      if (stateId) confMap[snap].push(stateId);
+    }
 
     // 3. Parse taken transitions per snapshot
+    // __taken0: [snapshot, transAtom] — non-parameterized
+    // __taken1: [snapshot, paramInstanceAtom, transAtom] — parameterized
     const takenMap = {}; // snapAtom → transitionId
     for (const [snap, transAtom] of (rels['this/__Snapshot.__taken0'] || [])) {
       const transKey = stripAtomSuffix(transAtom);
       const transId = atomToTransition[transKey];
+      if (transId) takenMap[snap] = transId;
+    }
+    for (const tuple of (rels['this/__Snapshot.__taken1'] || [])) {
+      if (tuple.length < 3) continue;
+      const [snap, instanceAtom, transAtom] = tuple;
+      const transKey = stripAtomSuffix(transAtom);
+      const instKey = stripAtomSuffix(instanceAtom); // e.g., "PID_0$0" → "PID_0"
+      const instMap = paramAtomToTransition[instKey];
+      const transId = instMap ? instMap[transKey] : null;
       if (transId) takenMap[snap] = transId;
     }
 
@@ -830,6 +1206,7 @@
 
     // 5. Parse variable values per snapshot
     // Variable relations look like: "this/__Snapshot.RootName_varName" → [[snap, valueAtom], ...]
+    // For parameterized vars (under a param state), tuples are [[snap, PID_atom, valueAtom], ...]
     const varRelations = {};
     for (const key of Object.keys(rels)) {
       if (key.startsWith('this/__Snapshot.') && !key.includes('__conf') && !key.includes('__taken') && !key.includes('__stable') && !key.includes('__sc_used')) {
@@ -838,18 +1215,67 @@
       }
     }
 
+    // Determine which vars are parameterized (belong to a parameterized state)
+    // A var is parameterized if model.vars has params for it
+    const paramVarSigs = {}; // varName → paramSig (e.g., "System/Elevator/direction" → "PID")
+    for (const v of (model.vars || [])) {
+      if (v.params && v.params.length > 0) {
+        paramVarSigs[v.id] = v.params[0].paramSig;
+      }
+    }
+    // Also check the original (unexpanded) model vars via _originalId pattern
+    // For expanded models, the var list comes from the original model
+
     // 6. Build snapshot objects
+    // Variables may be scalar (one/lone), set, or relations (arrow types).
+    // For parameterized vars, we split by instance: "direction[PID$0]", "direction[PID$1]"
     const snapshots = snapshotOrder.map((snapAtom, idx) => {
       const vars = {};
       for (const [varName, tuples] of Object.entries(varRelations)) {
-        for (const tuple of tuples) {
-          if (tuple[0] === snapAtom && tuple.length >= 2) {
-            let val = stripAtomSuffix(tuple[1]);
-            // Clean up boolean values
-            if (val === 'boolean/True') val = 'true';
-            else if (val === 'boolean/False') val = 'false';
-            vars[varName] = val;
+        const paramSig = paramVarSigs[varName];
+
+        if (paramSig) {
+          // Parameterized var: tuples are [snapshot, instanceAtom, value...]
+          // Split into per-instance vars
+          const instanceBuckets = {}; // "PID$0" → [values]
+          for (const tuple of tuples) {
+            if (tuple[0] !== snapAtom || tuple.length < 3) continue;
+            const instanceAtom = tuple[1]; // e.g., "PID$0"
+            const instKey = stripAtomSuffix(instanceAtom); // "PID_0$0" → "PID_0"
+            if (!instanceBuckets[instKey]) instanceBuckets[instKey] = [];
+            const tail = tuple.slice(2).map(atom => {
+              let val = stripAtomSuffix(atom); // e.g., "Floor_0$0" → "Floor_0" (valid Alloy identifier)
+              if (val === 'boolean/True') val = 'true';
+              else if (val === 'boolean/False') val = 'false';
+              return val;
+            });
+            instanceBuckets[instKey].push(tail.length === 1 ? tail[0] : tail);
           }
+          // Store as "varName[PID$0]", "varName[PID$1]", etc.
+          for (const [instKey, values] of Object.entries(instanceBuckets)) {
+            vars[`${varName}[${instKey}]`] = values;
+          }
+          // Also store empty arrays for instances with no value
+          const allInstances = paramInstances?.[paramSig] || [];
+          for (const inst of allInstances) {
+            const key = `${varName}[${inst}]`;
+            if (!(key in vars)) vars[key] = [];
+          }
+        } else {
+          // Non-parameterized var: tuples are [snapshot, value...]
+          const values = [];
+          for (const tuple of tuples) {
+            if (tuple[0] === snapAtom && tuple.length >= 2) {
+              const tail = tuple.slice(1).map(atom => {
+                let val = stripAtomSuffix(atom); // e.g., "Floor_0$0" → "Floor_0"
+                if (val === 'boolean/True') val = 'true';
+                else if (val === 'boolean/False') val = 'false';
+                return val;
+              });
+              values.push(tail.length === 1 ? tail[0] : tail);
+            }
+          }
+          vars[varName] = values;
         }
       }
 
@@ -864,6 +1290,26 @@
     });
 
     return snapshots;
+  }
+
+  /**
+   * Format a variable value (array) for display.
+   * - [] → "∅" (empty set / lone with no value)
+   * - ["x"] → "x" (scalar)
+   * - ["a","b","c"] → "{a, b, c}" (set)
+   * - [["a","b"],["c","d"]] → "{a→b, c→d}" (relation / arrow type)
+   */
+  function formatVarValue(arr) {
+    if (!Array.isArray(arr)) return String(arr); // legacy fallback
+    if (arr.length === 0) return '∅';
+    if (arr.length === 1) {
+      const v = arr[0];
+      return Array.isArray(v) ? v.map(String).join('→') : String(v);
+    }
+    // Multiple values — format as set
+    // Concrete sig names (Floor_0, Floor_1) are already readable
+    const items = arr.map(v => Array.isArray(v) ? v.map(String).join('→') : String(v));
+    return `{${items.join(', ')}}`;
   }
 
   /**
@@ -891,7 +1337,7 @@
     if (varEntries.length > 0) {
       lines.push('Variables:');
       for (const [k, v] of varEntries) {
-        lines.push(`  ${k} = ${v}`);
+        lines.push(`  ${k} = ${formatVarValue(v)}`);
       }
     } else {
       lines.push('Variables: —');
@@ -980,7 +1426,7 @@
     const varsEl = document.getElementById('info-vars');
     const varEntries = Object.entries(sn.vars);
     varsEl.textContent = varEntries.length > 0
-      ? varEntries.map(([k, v]) => `${k.split('/').pop()}=${v}`).join(', ')
+      ? varEntries.map(([k, v]) => `${k.split('/').pop()}=${formatVarValue(v)}`).join(', ')
       : '—';
 
     // Highlight the node in the trace graph and trace path
@@ -1063,7 +1509,7 @@
     const varsEl = document.getElementById('info-vars');
     const varEntries = Object.entries(snap.vars);
     if (varEntries.length > 0) {
-      varsEl.textContent = varEntries.map(([k, v]) => `${k.split('/').pop()}=${v}`).join(', ');
+      varsEl.textContent = varEntries.map(([k, v]) => `${k.split('/').pop()}=${formatVarValue(v)}`).join(', ');
     } else {
       varsEl.textContent = '—';
     }
@@ -1264,13 +1710,19 @@
       this.takenTransition = snapshot.takenTransition;
       this.stable = snapshot.stable;
       this.vars = { ...snapshot.vars };
+      this.rawState = snapshot.rawState || {};
       this.steps = [];                             // outgoing edges: [{node, transitionLabel}]
       this.snapshotIndex = snapshot.index;          // which snapshot this corresponds to
       this.solverInfo = null;                       // formatted solver output (set on first creation)
     }
 
-    /** Two nodes are equal if they have the same active states and variable values */
+    /** Two nodes are equal if they have the same active states and variable values.
+     *  Variable values are arrays (possibly of sub-arrays for relations), so we
+     *  sort them and compare via JSON.stringify for deep equality. */
     equals(other) {
+      if (this.rawState && other.rawState) {
+        return JSON.stringify(this.rawState) === JSON.stringify(other.rawState);
+      }
       if (this.activeStates.length !== other.activeStates.length) return false;
       for (let i = 0; i < this.activeStates.length; i++) {
         if (this.activeStates[i] !== other.activeStates[i]) return false;
@@ -1279,7 +1731,13 @@
       const keys2 = Object.keys(other.vars).sort();
       if (keys1.length !== keys2.length) return false;
       for (let i = 0; i < keys1.length; i++) {
-        if (keys1[i] !== keys2[i] || this.vars[keys1[i]] !== other.vars[keys2[i]]) return false;
+        if (keys1[i] !== keys2[i]) return false;
+        // Deep compare: values are arrays (possibly nested)
+        const v1 = this.vars[keys1[i]];
+        const v2 = other.vars[keys2[i]];
+        const s1 = JSON.stringify(Array.isArray(v1) ? [...v1].sort() : v1);
+        const s2 = JSON.stringify(Array.isArray(v2) ? [...v2].sort() : v2);
+        if (s1 !== s2) return false;
       }
       return true;
     }
@@ -1652,23 +2110,45 @@
     document.getElementById('btn-simulate').disabled = !enabled;
   }
 
+  async function initializeLoadedModel(sigScopes = {}) {
+    currentSigScopes = sigScopes;
+    // Expand parameterized states into per-instance copies for the state-hierarchy
+    // visualization (and for atom-to-state mapping during trace rendering).
+    // When sigScopes is empty or the model has no parameterized states this is a no-op.
+    const source = appState.rawModel || appState.model;
+    const { model: expandedModel } = expandParameterizedModel(source, sigScopes);
+    appState.model = expandedModel;
+    renderGraph(appState.model);
+    setButtons(true);
+    setStatus('Finding initial state...');
+    const solution = await initModel(currentSigScopes);
+    handleInitSolution(solution, appState.model);
+  }
+
   // ── Event Handlers ──
   document.getElementById('btn-load').addEventListener('click', async () => {
     const filePath = document.getElementById('file-path').value.trim();
     if (!filePath) return;
 
-    setStatus('Loading...');
+    setStatus('Inspecting model...');
     document.getElementById('loading').classList.add('active');
     document.getElementById('btn-load').disabled = true;
     clearTrace();
 
     try {
-      const model = await loadModel(filePath);
-      appState.model = model;
-      appState.status = 'exploring';
+      const inspected = await inspectModel(filePath);
+      appState.rawModel = inspected.model;
+      appState.model = inspected.model; // placeholder; re-expanded once scopes are known
+      appState.status = 'loaded';
+      currentScopeSigs = inspected.scopeSigs || [];
       document.getElementById('loading').classList.remove('active');
-      renderGraph(model);
-      setStatus(`Loaded: ${model.rootName} (${model.states.length} states, ${model.transitions.length} transitions)`);
+      if (currentScopeSigs.length > 0) {
+        setButtons(false);
+        showScopeDialog(currentScopeSigs);
+        setStatus('Set scopes before visualization');
+      } else {
+        await initializeLoadedModel({});
+      }
     } catch (err) {
       document.getElementById('loading').classList.remove('active');
       setStatus('Error: ' + err.message);
@@ -1695,24 +2175,87 @@
   });
   document.getElementById('detail-close').addEventListener('click', clearSelection);
 
-  // Simulate: translate + init (find initial state only)
+  // Simulate: translate, then show scope dialog if needed, then init
   document.getElementById('btn-simulate').addEventListener('click', async () => {
     if (!appState.model) return;
 
-    setStatus('Translating...');
+    setStatus('Finding initial state...');
     document.getElementById('btn-simulate').disabled = true;
     clearTrace(); // fresh simulation resets the state graph
 
     try {
-      await translateModel('traces');
-      setStatus('Finding initial state...');
-      const solution = await initModel();
+      const solution = await initModel(currentSigScopes);
       handleInitSolution(solution, appState.model);
+      if (false) {
+        // Show scope config dialog — simulation continues from dialog's Run button
+        showScopeDialog(scopeSigs);
+      } else if (false) {
+        // No parameterized sigs — run directly with original model
+        currentSigScopes = {};
+        const modelForInit = appState.model;
+        setStatus('Finding initial state...');
+        const solution = await initModel();
+        handleInitSolution(solution, modelForInit);
+      }
     } catch (err) {
       setStatus('Simulation error: ' + err.message);
     } finally {
       document.getElementById('btn-simulate').disabled = false;
     }
+  });
+
+  /** Show the scope configuration dialog with default scope = 1 for each sig */
+  function showScopeDialog(scopeSigs) {
+    const rowsEl = document.getElementById('scope-rows');
+    rowsEl.innerHTML = '';
+    for (const sig of scopeSigs) {
+      const prevScope = currentSigScopes[sig] || 1;
+      const row = document.createElement('div');
+      row.className = 'scope-row';
+      row.innerHTML = `<span class="scope-sig-name">${sig}</span>
+        <input type="number" class="scope-input" data-sig="${sig}" min="1" max="20" value="${prevScope}" />`;
+      rowsEl.appendChild(row);
+    }
+    document.getElementById('scope-overlay').classList.add('open');
+    // Focus the first input
+    const firstInput = rowsEl.querySelector('.scope-input');
+    if (firstInput) firstInput.focus();
+  }
+
+  // Scope dialog: Run button
+  document.getElementById('scope-run').addEventListener('click', async () => {
+    // Collect scopes from inputs
+    const inputs = document.querySelectorAll('#scope-rows .scope-input');
+    const scopes = {};
+    inputs.forEach(inp => {
+      scopes[inp.dataset.sig] = Math.max(1, parseInt(inp.value) || 1);
+    });
+    currentSigScopes = scopes;
+    document.getElementById('scope-overlay').classList.remove('open');
+
+    // Now run init with the configured scopes using ALDB-style concrete sigs.
+    setStatus('Finding initial state...');
+    document.getElementById('btn-simulate').disabled = true;
+    try {
+      await initializeLoadedModel(currentSigScopes);
+    } catch (err) {
+      setStatus('Simulation error: ' + err.message);
+    } finally {
+      document.getElementById('btn-simulate').disabled = false;
+    }
+  });
+
+  // Scope dialog: Cancel button
+  document.getElementById('scope-cancel').addEventListener('click', () => {
+    document.getElementById('scope-overlay').classList.remove('open');
+    document.getElementById('btn-simulate').disabled = false;
+    setStatus('Simulation cancelled');
+  });
+
+  // Scope dialog: Enter key runs, Escape cancels
+  document.getElementById('scope-dialog').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('scope-run').click();
+    else if (e.key === 'Escape') document.getElementById('scope-cancel').click();
   });
 
   // Step from current state node
@@ -1721,16 +2264,64 @@
     const sn = stateGraph.nodes.find(n => n.id === currentStateNodeId);
     if (!sn) return;
 
+    lastStepStartNode = sn;
+    setStatus(`Stepping from ${sn.label}...`);
+    document.getElementById('btn-step').disabled = true;
+
+    try {
+      const solution = await stepFromState(sn.rawState, currentSigScopes);
+      handleStepSolution(solution, appState.model, sn);
+    } catch (err) {
+      setStatus('Step error: ' + err.message);
+    } finally {
+      document.getElementById('btn-step').disabled = false;
+    }
+    return;
+
     // Build initState for the step API
+    // For parameterized models, separate conf0 (non-param) from conf1 (per-instance),
+    // and vars from paramVars.
+    const conf0 = [];       // non-parameterized states
+    const paramConf = {};   // {PID: {"0": ["System/Elevator/Idle"], "1": ["System/Elevator/MovingUp"]}}
+    const vars = {};        // non-parameterized vars
+    const paramVars = {};   // {PID: {"0": {varName: value}, "1": {varName: value}}}
+
+    // Parse expanded state IDs: "System/Elevator/Idle[PID_0]" → paramSig=PID, idx=0, original=System/Elevator/Idle
+    // Concrete sig naming: PID_0, PID_1 (underscores, not dollar signs)
+    const paramPattern = /^(.+)\[(\w+)_(\d+)\]$/;
+    for (const stateId of sn.activeStates) {
+      const m = stateId.match(paramPattern);
+      if (m) {
+        const [, originalId, paramSig, idx] = m;
+        if (!paramConf[paramSig]) paramConf[paramSig] = {};
+        if (!paramConf[paramSig][idx]) paramConf[paramSig][idx] = [];
+        paramConf[paramSig][idx].push(originalId);
+      } else {
+        conf0.push(stateId);
+      }
+    }
+
+    // Parse var keys: "System/Elevator/direction[PID_0]" → parameterized var
+    for (const [key, val] of Object.entries(sn.vars)) {
+      const vm = key.match(/^(.+)\[(\w+)_(\d+)\]$/);
+      if (vm) {
+        const [, origVarName, paramSig, idx] = vm;
+        if (!paramVars[paramSig]) paramVars[paramSig] = {};
+        if (!paramVars[paramSig][idx]) paramVars[paramSig][idx] = {};
+        paramVars[paramSig][idx][origVarName.replace(/\//g, '_')] = val;
+      } else {
+        vars[key.replace(/\//g, '_')] = val;
+      }
+    }
+
     const initState = {
-      conf: sn.activeStates,
-      vars: {},
+      conf: conf0,
+      vars,
       stable: sn.stable
     };
-    // Convert var keys from Dash paths (Mutex/semaphore/free) to Alloy field names (Mutex_semaphore_free)
-    for (const [key, val] of Object.entries(sn.vars)) {
-      initState.vars[key.replace(/\//g, '_')] = val;
-    }
+    // Add parameterized data if present
+    if (Object.keys(paramConf).length > 0) initState.paramConf = paramConf;
+    if (Object.keys(paramVars).length > 0) initState.paramVars = paramVars;
 
     lastStepStartNode = sn; // Remember for Alt
 
@@ -1738,7 +2329,7 @@
     document.getElementById('btn-step').disabled = true;
 
     try {
-      const solution = await stepFromState(initState);
+      const solution = await stepFromState(initState, currentSigScopes);
       handleStepSolution(solution, appState.model, sn);
     } catch (err) {
       setStatus('Step error: ' + err.message);

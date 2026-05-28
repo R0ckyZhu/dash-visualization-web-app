@@ -44,7 +44,7 @@ class JavaBridge:
             try:
                 line = await loop.run_in_executor(None, self._process.stderr.readline)
                 if line:
-                    logger.debug("[java] %s", line.rstrip())
+                    logger.info("[java] %s", line.rstrip())
                 else:
                     break
             except Exception:

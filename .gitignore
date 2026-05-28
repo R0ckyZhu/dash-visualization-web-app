@@ -29,6 +29,10 @@ Thumbs.db
 # Node
 node_modules/
 
+# Runtime artifacts
+*.pid
+backend/repro_*.py
+
 # Claude
 .claude/
 
