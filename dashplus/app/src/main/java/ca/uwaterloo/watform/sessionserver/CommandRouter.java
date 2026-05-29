@@ -89,25 +89,124 @@ public class CommandRouter {
         String filePath = params.get("filePath").getAsString();
         Path path = Paths.get(filePath).toAbsolutePath();
 
+        // The upstream DashToAlloy translator (WatForm/dashplus@f796d71) no longer
+        // synthesises implicit parameter sigs from `conc state X [PARAM]`. Legacy
+        // models that omit `sig PARAM {}` crash at AMFieldTable arity computation.
+        // Read the source, inject any missing param sigs, and hand the patched
+        // text to the parser via a temp file in the same directory (so any
+        // relative `open util/...` imports still resolve identically).
+        Path effectivePath = path;
+        Path tempPath = null;
+        try {
+            String source = java.nio.file.Files.readString(path);
+            String patched = injectMissingDashParamSigs(source);
+            if (!patched.equals(source)) {
+                // Keep the .dsh extension (the parser rejects unknown extensions).
+                String orig = path.getFileName().toString();
+                String base = orig.endsWith(".dsh") ? orig.substring(0, orig.length() - 4) : orig;
+                tempPath = path.resolveSibling("." + base + ".autosig.dsh");
+                java.nio.file.Files.writeString(tempPath, patched);
+                effectivePath = tempPath;
+            }
+        } catch (java.io.IOException e) {
+            return errorResponse("Could not read source file: " + e.getMessage());
+        }
+
         Reporter.INSTANCE.reset();
-        Reporter.INSTANCE.pushPath(path);
+        Reporter.INSTANCE.pushPath(path); // report errors against the user-facing path
 
-        AlloyModel model = Parser.parseToModel(path);
-        if (model == null) {
-            return errorResponse("Failed to parse file: " + filePath);
+        try {
+            AlloyModel model = Parser.parseToModel(effectivePath);
+            if (model == null) {
+                return errorResponse("Failed to parse file: " + filePath);
+            }
+            if (!(model instanceof DashModel)) {
+                return errorResponse("File is not a Dash model: " + filePath);
+            }
+
+            currentModel = (DashModel) model;
+            currentAlloyModel = null;
+            clearSimulationState();
+
+            Reporter.INSTANCE.popPath();
+
+            JsonObject data = DashModelSerializer.serialize(currentModel);
+            return okResponse(data);
+        } finally {
+            if (tempPath != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(tempPath);
+                } catch (java.io.IOException ignored) {
+                    // best-effort cleanup
+                }
+            }
         }
-        if (!(model instanceof DashModel)) {
-            return errorResponse("File is not a Dash model: " + filePath);
+    }
+
+    /**
+     * Find {@code conc [state] Name [Param]} declarations in Dash+ source and prepend {@code sig
+     * Param {}} for any param sig not already declared. Returns the patched source if anything was
+     * added, or the original string otherwise.
+     */
+    private String injectMissingDashParamSigs(String source) {
+        // Param-introducing positions: `conc Name [P]` or `conc state Name [P]`
+        // followed by `{` (the state body). This avoids matching `Elevator[PID_1]`
+        // instance references and `min[Floor]` function calls.
+        Pattern paramIntro =
+                Pattern.compile("\\bconc\\b\\s+(?:state\\s+)?\\w+\\s*\\[\\s*(\\w+)\\s*\\]\\s*\\{");
+        java.util.LinkedHashSet<String> paramSigs = new java.util.LinkedHashSet<>();
+        Matcher m = paramIntro.matcher(source);
+        while (m.find()) {
+            paramSigs.add(m.group(1));
+        }
+        if (paramSigs.isEmpty()) {
+            return source;
         }
 
-        currentModel = (DashModel) model;
-        currentAlloyModel = null;
-        clearSimulationState();
+        // Already-declared sigs (any modifier, any parent clause)
+        Pattern sigDecl =
+                Pattern.compile(
+                        "^\\s*(?:abstract\\s+|one\\s+|lone\\s+|some\\s+|private\\s+)*sig\\s+(\\w+)\\b",
+                        Pattern.MULTILINE);
+        java.util.HashSet<String> declared = new java.util.HashSet<>();
+        Matcher d = sigDecl.matcher(source);
+        while (d.find()) {
+            declared.add(d.group(1));
+        }
 
-        Reporter.INSTANCE.popPath();
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        for (String p : paramSigs) {
+            if (!declared.contains(p)) missing.add(p);
+        }
+        if (missing.isEmpty()) {
+            return source;
+        }
 
-        JsonObject data = DashModelSerializer.serialize(currentModel);
-        return okResponse(data);
+        // Insert the new declarations after the last top-level `open ...` import (or
+        // at the start of the file if there are none) so they precede every state and
+        // sig declaration.
+        Pattern openLine = Pattern.compile("^\\s*open\\s+.+$", Pattern.MULTILINE);
+        Matcher o = openLine.matcher(source);
+        int insertPos = 0;
+        while (o.find()) {
+            insertPos = o.end();
+        }
+        // Step past the trailing newline(s) so the inserted block starts on a fresh line.
+        while (insertPos < source.length()
+                && (source.charAt(insertPos) == '\n' || source.charAt(insertPos) == '\r')) {
+            insertPos++;
+        }
+
+        StringBuilder injection = new StringBuilder();
+        injection.append("// auto-injected by SessionServer: missing param sigs\n");
+        for (String p : missing) {
+            injection.append("sig ").append(p).append(" {}\n");
+        }
+        injection.append('\n');
+
+        System.err.println("[SessionServer] auto-injected sig declarations for params: " + missing);
+
+        return source.substring(0, insertPos) + injection + source.substring(insertPos);
     }
 
     private JsonObject handleTranslate(JsonObject params) {
