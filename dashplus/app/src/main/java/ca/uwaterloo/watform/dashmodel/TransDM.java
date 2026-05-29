@@ -149,9 +149,9 @@ public class TransDM extends InitsInvsDM {
         assert (!tfqn.isEmpty());
         assert (params != null);
         if (tt.containsKey(tfqn)) {
-            DashModelErrors.duplicateName(pos, "trans", tfqn);
+            throw DashModelError.duplicateName(pos, "trans", tfqn);
         } else if (hasPrime(tfqn)) {
-            DashModelErrors.nameShouldNotBePrimed(pos, tfqn);
+            throw DashModelError.nameShouldNotBePrimed(pos, tfqn);
         } else {
             this.tt.put(tfqn, new TransEntry(params, fromR, onR, whenR, gotoR, sendR, doR));
         }
@@ -212,5 +212,19 @@ public class TransDM extends InitsInvsDM {
             // add more
             return s;
         }
+    }
+
+    public void setWhenR(String tfqn, AlloyExpr exp) {
+        TransEntry entry = this.tt.get(tfqn);
+        this.tt.put(
+                tfqn,
+                new TransEntry(
+                        entry.params,
+                        entry.fromR,
+                        entry.onR,
+                        exp,
+                        entry.gotoR,
+                        entry.sendR,
+                        entry.doR));
     }
 }

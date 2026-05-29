@@ -1,5 +1,7 @@
 package ca.uwaterloo.watform.alloytotla;
 
+import static ca.uwaterloo.watform.utils.GeneralUtil.mapBy;
+
 import ca.uwaterloo.watform.alloyast.expr.binary.AlloyBinaryExpr;
 import ca.uwaterloo.watform.alloyast.expr.misc.AlloyBlock;
 import ca.uwaterloo.watform.alloyast.expr.misc.AlloyBracketExpr;
@@ -14,7 +16,6 @@ import ca.uwaterloo.watform.alloyast.expr.var.AlloyNoneExpr;
 import ca.uwaterloo.watform.alloyast.expr.var.AlloyQnameExpr;
 import ca.uwaterloo.watform.alloyast.expr.var.AlloyUnivExpr;
 import ca.uwaterloo.watform.alloyast.expr.var.AlloyVarExpr;
-import ca.uwaterloo.watform.dashast.DashParam;
 import ca.uwaterloo.watform.dashast.dashref.DashRef;
 import ca.uwaterloo.watform.exprvisitor.AlloyExprVis;
 import java.util.ArrayList;
@@ -30,15 +31,10 @@ public class QnameExtractVis implements AlloyExprVis<List<String>> {
     }
 
     @Override
-    public List<String> visit(DashParam dashParam) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'visit'");
-    }
-
-    @Override
     public List<String> visit(AlloyBinaryExpr binExpr) {
         // TODO Auto-generated method stub
-        var ans = visit(binExpr.left);
+        List<String> ans = new ArrayList<>();
+        ans.addAll(visit(binExpr.left));
         ans.addAll(visit(binExpr.right));
         return ans;
     }
@@ -110,6 +106,7 @@ public class QnameExtractVis implements AlloyExprVis<List<String>> {
     @Override
     public List<String> visit(AlloyDecl decl) {
         // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'visit'");
+
+        return mapBy(decl.qnames, q -> q.label);
     }
 }

@@ -5,6 +5,8 @@ import static ca.uwaterloo.watform.alloyinterface.AlloyInterface.*;
 import static ca.uwaterloo.watform.utils.GeneralUtil.*;
 
 import ca.uwaterloo.watform.alloyast.expr.AlloyExpr;
+import ca.uwaterloo.watform.alloyast.expr.misc.AlloyBlock;
+import ca.uwaterloo.watform.alloyast.expr.var.AlloyQnameExpr;
 import ca.uwaterloo.watform.alloyast.paragraph.command.AlloyCmdPara;
 import ca.uwaterloo.watform.alloyinterface.Solution;
 import ca.uwaterloo.watform.alloymodel.AlloyModel;
@@ -68,22 +70,29 @@ public class PredAbsUtil {
         if (cache.containsKey(key)) {
             return cache.get(key);
         } else {
-            String pname = "" + "query_" + Integer.toString(cache.size());
+            String pname = "query_" + Integer.toString(cache.size());
             DSL dsl = new DSL(false);
             if (snReqd) {
                 am.addPred(pname, dsl.curNextDecls(), setToList(exprs));
             } else {
                 am.addPred(pname, dsl.curDecls(), setToList(exprs));
             }
-            int cmdIdx = addRunCmd(pname, am, scope) - 1;
+            int cmdIdx = addRunCmd(pname, am, scope);
+            // am.resolve();
             try {
                 Solution sol = executeCommand(am, cmdIdx);
                 cache.put(key, sol.isSat());
                 return sol.isSat();
             } catch (Exception e) {
-                // System.out.println("*********MODEL*********");
-                // System.out.println(am.toString());
-                // System.out.println("***********************");
+                System.out.println("*********MODEL*********");
+                System.out.println(am.toString());
+                System.out.println(
+                        "Tried to execute command number "
+                                + cmdIdx
+                                + " named "
+                                + pname
+                                + " and failed.");
+                System.out.println("***********************");
                 printStackTrace();
                 return false;
             }
@@ -96,19 +105,43 @@ public class PredAbsUtil {
     }
 
     public static int addRunCmd(String pname, AlloyModel am, AlloyCmdPara.CommandDecl.Scope scope) {
-        am.addPara(
+        am.addCmdPara(
                 new AlloyCmdPara(
                         new AlloyCmdPara.CommandDecl(
                                 AlloyCmdPara.CommandDecl.CmdType.RUN, AlloyVar(pname), scope)));
-        return am.getParas(AlloyCmdPara.class).size();
+        return am.getNumCmds() - 1;
     }
 
     public static int addCheckCmd(
             String pname, AlloyModel am, AlloyCmdPara.CommandDecl.Scope scope) {
-        am.addPara(
+        am.addCmdPara(
                 new AlloyCmdPara(
                         new AlloyCmdPara.CommandDecl(
                                 AlloyCmdPara.CommandDecl.CmdType.CHECK, AlloyVar(pname), scope)));
-        return am.getParas(AlloyCmdPara.class).size();
+        return am.getNumCmds() - 1;
+    }
+
+    public static String getPredNameFromCmd(AlloyModel am, int cmdIdx) {
+        return getPredNameFromCmd(am.getCmdNum(cmdIdx).orElse(null));
+    }
+
+    public static String getPredNameFromCmd(AlloyCmdPara cmd) {
+        if (cmd == null) return null;
+        AlloyQnameExpr predName = cmd.cmdDecls.get(0).invoQname.orElse(null);
+        if (predName != null) {
+            return predName.vars.get(0).label;
+        } else {
+            System.out.println("In PredAbsUtil.getPredNameFromCmd(): predName is null.");
+            return null;
+        }
+    }
+
+    public static AlloyBlock getFormulaFromCmd(AlloyModel am, int cmdIdx) {
+        return getFormulaFromCmd(am.getCmdNum(cmdIdx).orElse(null));
+    }
+
+    public static AlloyBlock getFormulaFromCmd(AlloyCmdPara cmd) {
+        if (cmd == null) return null;
+        return cmd.cmdDecls.get(0).constrBlock.orElse(null);
     }
 }

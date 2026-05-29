@@ -1,6 +1,5 @@
 package ca.uwaterloo.watform.sessionserver;
 
-import ca.uwaterloo.watform.alloyast.paragraph.command.AlloyCmdPara;
 import ca.uwaterloo.watform.alloyinterface.AlloyInterface;
 import ca.uwaterloo.watform.alloymodel.AlloyModel;
 import ca.uwaterloo.watform.dashmodel.DashModel;
@@ -129,7 +128,7 @@ public class CommandRouter {
         currentAlloyModel = new DashToAlloy(currentModel, opt).translate();
         clearSimulationState();
 
-        int cmdCount = currentAlloyModel.getParas(AlloyCmdPara.class).size();
+        int cmdCount = currentAlloyModel.getNumCmds();
         JsonObject data = new JsonObject();
         data.addProperty("commandCount", cmdCount);
         data.addProperty("alloyCode", currentAlloyModel.toString());

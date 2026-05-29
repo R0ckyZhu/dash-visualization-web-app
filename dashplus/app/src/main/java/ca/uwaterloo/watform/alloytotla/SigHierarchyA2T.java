@@ -1,9 +1,6 @@
 package ca.uwaterloo.watform.alloytotla;
 
-import static ca.uwaterloo.watform.alloytotla.AlloyToTlaHelpers.*;
 import static ca.uwaterloo.watform.alloytotla.AlloyToTlaStrings.*;
-import static ca.uwaterloo.watform.alloytotla.AlloyToTlaStrings.SIG_SETS_PRIMED;
-import static ca.uwaterloo.watform.alloytotla.AlloyToTlaStrings.SIG_SETS_UNPRIMED;
 import static ca.uwaterloo.watform.tlaast.CreateHelper.*;
 import static ca.uwaterloo.watform.utils.GeneralUtil.*;
 
@@ -36,30 +33,25 @@ public class SigHierarchyA2T extends SigConstsA2T {
         tlaModel.addDefn(
                 TlaDefn(
                         SIG_SETS_UNPRIMED,
-                        repeatedAnd(mapBy(sortedNonTopLevelSigs, sn -> sigSetClause(sn, false)))));
+                        repeatedAnd(
+                                mapBy(
+                                        sortedNonTopLevelSigs,
+                                        sn -> sigSetClauseNonTopLevel(sn, false)))));
 
         tlaModel.addDefn(
                 TlaDefn(
                         SIG_SETS_PRIMED,
-                        repeatedAnd(mapBy(sortedNonTopLevelSigs, sn -> sigSetClause(sn, true)))));
+                        repeatedAnd(
+                                mapBy(
+                                        sortedNonTopLevelSigs,
+                                        sn -> sigSetClauseNonTopLevel(sn, true)))));
     }
 
-    private TlaExp sigSetClause(String sn, boolean primed) {
-        TlaExp v = primed ? TlaVar(sn).PRIME() : TlaVar(sn);
-        /*
-        if (alloyModel.isTopLevelSig(sn))
-            return v.IN(
-                    TlaSubsetUnary(
-                            TlaSetMap(
-                                    TlaQuantOpHead(X(), TlaConst(sigSet(sn))),
-                                    TlaTuple(Arrays.asList(X())))));
-        else
-        */
-        return v.IN(
-                TlaSubsetUnary(
-                        repeatedUnion(
-                                mapBy(
-                                        alloyModel.allParentsOfSig(sn),
-                                        psn -> primed ? TlaVar(psn).PRIME() : TlaVar(psn)))));
+    private TlaExp sigSetClauseNonTopLevel(String signame, boolean primed) {
+
+        TlaExp v = primed ? TlaVar(signame).PRIME() : TlaVar(signame);
+        List<TlaExp> parents =
+                mapBy(alloyModel.allParents(signame), p -> primed ? TlaVar(p).PRIME() : TlaVar(p));
+        return v.IN(TlaSubsetUnary(repeatedUnion(parents)));
     }
 }

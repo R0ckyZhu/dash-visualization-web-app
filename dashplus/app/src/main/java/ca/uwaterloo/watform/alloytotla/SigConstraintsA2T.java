@@ -40,19 +40,19 @@ public class SigConstraintsA2T extends CommandDefnA2T {
     private List<TlaExp> constraints(String sig, AlloyModel alloyModel) {
         List<TlaExp> constraints = new ArrayList<>();
 
-        alloyModel
-                .alloyBlockOfSig(sig)
-                .ifPresent(
-                        b -> {
-                            // universal quantification for facts
-                            constraints.add(new AlloyToTlaExprVis().visit(b));
-                        });
+        // alloyModel
+        //         .block(sig)
+        //         .ifPresent(
+        //                 b -> {
+        //                     // universal quantification for facts
+        //                     constraints.add(new AlloyToTlaExprVis().visit(b));
+        //                 });
 
         if (alloyModel.isOneSig(sig)) constraints.add(_ONE(TlaVar(sig)));
         if (alloyModel.isLoneSig(sig)) constraints.add(_LONE(TlaVar(sig)));
         if (alloyModel.isSomeSig(sig)) constraints.add(_SOME(TlaVar(sig)));
 
-        List<String> extendsChildNames = alloyModel.extendsChildrenOfSig(sig);
+        List<String> extendsChildNames = alloyModel.extendsChildren(sig);
 
         // pairwise disjoint sets for sigs that extend the same sig
         int n = extendsChildNames.size();

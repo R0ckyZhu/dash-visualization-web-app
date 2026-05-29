@@ -20,10 +20,7 @@ public class NextDefnA2T extends InitDefnA2T {
         List<TlaVar> unchanged = new ArrayList<>();
 
         alloyModel.allSigs().forEach(sigName -> unchanged.add(TlaVar(sigName)));
-
-        alloyModel
-                .allSigs()
-                .forEach(sn -> alloyModel.fieldNames(sn).forEach(fn -> unchanged.add(TlaVar(fn))));
+        alloyModel.allFields().forEach(field -> unchanged.add(TlaVar(field)));
 
         tlaModel.addDefn(TlaDefn(NEXT, TlaUnchanged(unchanged)));
     }

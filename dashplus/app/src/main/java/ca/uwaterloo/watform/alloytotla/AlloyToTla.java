@@ -21,7 +21,7 @@ public class AlloyToTla extends StdLibsA2T {
 
     public List<TlaModel> translate(String baseName) {
 
-        List<AlloyCmdPara> paras = alloyModel.getParas(AlloyCmdPara.class);
+        List<AlloyCmdPara> paras = alloyModel.allCmdParas();
 
         l.info(paras.toString());
 
@@ -55,6 +55,9 @@ public class AlloyToTla extends StdLibsA2T {
 
         tlaModel.addComment("signature hierarchy", verbose);
         addSigHierarchy(tlaModel);
+
+        tlaModel.addComment("field types", verbose);
+        addFieldTypes(tlaModel);
 
         tlaModel.addComment("signature constraints", verbose);
         addSigConstraints(tlaModel);
