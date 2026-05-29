@@ -313,10 +313,15 @@ public class CommandRouter {
 
         // Single fixed scope: exactly 2 __Snapshots (current + next).
         // No iteration — the step scope is fixed by the ALDB protocol.
-        // No-stutter constraint forces a real transition between the two snapshots,
-        // so the user sees actual progress rather than a self-loop the solver picked
-        // because stutter is part of small_step's disjunction in traces mode.
-        String runCmd = buildRunCommand(2, buildNoStutterConstraint());
+        //
+        // No-stutter constraint temporarily disabled. It was forcing the solver
+        // to pick a real transition over `__stutter`, but combined with the
+        // upstream sc_used / taken bookkeeping it often makes mid-big-step
+        // states UNSAT (see the "no successor from S3" investigation). Until
+        // we untangle that, leave stutter as a legal small_step satisfaction;
+        // the frontend can flag stutter steps to the user.
+        // To re-enable: pass buildNoStutterConstraint() as the second argument.
+        String runCmd = buildRunCommand(2, "");
         String fullCode = storedModelString + newInit + "\n" + runCmd + "\n";
 
         try {
