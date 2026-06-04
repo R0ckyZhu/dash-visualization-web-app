@@ -1,0 +1,100 @@
+// this version of the bit counter is based on events and a variable
+// On the external event input of Tk
+// the bit counter increases the number it represents by 1 and when it has completed this task, it generates the event Done
+ 
+
+// each big step consists of exactly one small step 
+// the small step is taken by the current sister
+// we need the current sister because not every sister can respond to the Tk
+
+
+// arrange the sister bits in a linear order
+// PID can not be empty
+open util/ordering[PID] as PID
+
+sig PID {}
+
+state Counter {
+	// external event makes the bit counter increase
+	env event Tk {}
+	// event generated when it has finished incrementing the bit counter by 1
+	event Done {}
+	// which sister has the turn to increment
+	current: one PID
+
+	conc Bit [PID] {
+		// internal event for a particular Bit
+		event Flip {}
+
+		default state Bit0 {
+			trans ZeroToOneFirst {
+				when {
+					thisBit in current
+					thisBit in PID/first
+				}
+				on Tk
+				goto Bit1
+				// no sister can do anything so don't change current
+			}
+			trans ZeroToOne {
+				when {
+					thisBit in current
+					thisBit !in PID/first
+				}
+				on Flip
+				goto Bit1
+				do current' = PID/next[current]
+			}
+		}
+		
+		state Bit1 {
+			trans OneToZeroFirst {
+				when {
+					thisBit in current
+					thisBit in PID/first
+					thisBit !in PID/last
+				}
+				on Tk
+				goto Bit0
+				send Bit[PID/next[thisBit]]/Flip
+				do current' = PID/next[current]
+			}
+			trans OneToZeroFirstAndLast {
+				when {
+					thisBit in current
+					thisBit in PID/first
+					thisBit in PID/last
+				}
+				on Tk
+				goto Bit0
+				send Done
+				do current' = PID/first
+			}
+			trans OneToZeroMiddle {
+				when {
+					 thisBit in current
+					 thisBit !in PID/first
+					 thisBit !in PID/last
+				}
+				on Flip
+				goto Bit0
+				send Bit[PID/next[thisBit]]/Flip
+				do current' = PID/next[current]
+			}
+			trans OneToZeroLast {
+				when {
+					thisBit in current
+					thisBit in PID/last
+				}
+				on Flip
+				goto Bit0
+				send Done
+				do current' = PID/first
+			}
+		}
+
+		init {
+			current = PID/first
+		}
+	}
+}

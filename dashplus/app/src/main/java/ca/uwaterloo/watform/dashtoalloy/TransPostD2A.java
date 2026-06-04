@@ -60,8 +60,7 @@ import ca.uwaterloo.watform.dashast.dashref.DashRef;
 import ca.uwaterloo.watform.dashast.dashref.TransDashRef;
 import ca.uwaterloo.watform.dashmodel.DashModel;
 import ca.uwaterloo.watform.dashmodel.DashParam;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class TransPostD2A extends TransTestIfNextStableD2A {
 
@@ -115,7 +114,7 @@ public class TransPostD2A extends TransTestIfNextStableD2A {
         }
     }
 
-    private void addVarConstraints(String tfqn, List<AlloyExpr> body) {
+    private void addVarConstraints(Optional<String> tfqnOpt, List<AlloyExpr> body) {
         // vars not mentioned in action do not change
         // actions are handled separately
 
@@ -141,9 +140,12 @@ public class TransPostD2A extends TransTestIfNextStableD2A {
         // all DashRefs used in action or invs
         // in trans could be primed or unprimed
         List<DashRef> dashRefsInTrans = emptyList();
-        if (this.dm.doR(tfqn) != null) {
-            dashRefsInTrans = setToList(this.collectDashRefs(this.dm.doR(tfqn)));
+        if (tfqnOpt.isPresent() && this.dm.doR(tfqnOpt.get()) != null) {
+            dashRefsInTrans = setToList(this.collectDashRefs(this.dm.doR(tfqnOpt.get())));
+        } else {
+            dashRefsInTrans = emptyList();
         }
+
         // invs cannot have primes in them
         dashRefsInTrans.addAll(
                 flatten(mapBy(this.dm.invsR(), y -> setToList(this.collectDashRefs(y)))));
@@ -480,66 +482,89 @@ public class TransPostD2A extends TransTestIfNextStableD2A {
     }
 
     public void addTransPost(String tfqn) {
-        String tout = DashFQN.translateFQN(tfqn);
-        List<DashParam> prs = this.dm.transParams(tfqn);
+        this.addTransPost(Optional.of(tfqn), false);
+    }
+
+    public void addTransPostVarsOnly(String tfqn) {
+        this.addTransPost(Optional.of(tfqn), true);
+    }
+
+    public void addTransPostNoTrans() {
+        this.addTransPost(Optional.empty(), true);
+    }
+
+    private void addTransPost(Optional<String> tfqnOpt, Boolean varsOnly) {
+
         List<AlloyExpr> body = this.dsl.emptyExprList();
 
-        if (!this.dm.hasOnlyOneState())
-            // forall i. confi' = confi - exitedi + enteredi
-            this.addConfConstraints(tfqn, body);
+        // dealing with the vars not mentioned in the action
+        // if no tfqn, this will deal set all the vars to be equal to their previous values
+        this.addVarConstraints(tfqnOpt, body);
 
-        // forall i : takeni' = {t1}
-        this.addTransTakenConstraints(tfqn, body);
-
-        // action_t1[s,s']
-        if (this.dm.doR(tfqn) != null) body.add(this.translateExpr(this.dm.doR(tfqn)));
-
-        // System.out.println("here22");
-        // System.out.println(body);
-
-        this.addVarConstraints(tfqn, body);
-
-        // System.out.println("here23");
-        // System.out.println(body);
-
-        AlloyExpr c1 = this.case1(tfqn);
-        AlloyExpr c2 = this.case2(tfqn);
-        AlloyExpr c3 = this.case3(tfqn);
-        AlloyExpr c4 = this.case4(tfqn);
-
-        AlloyExpr stableTrueAndScopesUsedEmpty;
-        if (this.dm.hasConcurrency()) {
-            List<AlloyExpr> scopesUsedEmpty = this.dsl.emptyExprList();
-
-            for (int i = 0; i <= this.dm.maxDepthParams(); i++) {
-                scopesUsedEmpty.add(AlloyEqual(this.dsl.nextScopesUsed(i), this.dsl.noneArrow(i)));
-            }
-            stableTrueAndScopesUsedEmpty =
-                    AlloyAnd(this.dsl.nextStableTrue(), AlloyAndList(scopesUsedEmpty));
+        if (!tfqnOpt.isPresent()) {
+            List<DashParam> prs = this.dm.allParams();
+            this.am.addPred(D2AStrings.noVarChange, this.dsl.curNextParamsDecls(prs), body);
         } else {
-            stableTrueAndScopesUsedEmpty = this.dsl.nextStableTrue();
+            // action_t1[s,s']
+            String tfqn = tfqnOpt.get();
+            if (this.dm.doR(tfqn) != null) body.add(this.translateExpr(this.dm.doR(tfqn)));
+
+            String tout = DashFQN.translateFQN(tfqn);
+            List<DashParam> prs = this.dm.transParams(tfqn);
+
+            if (!varsOnly) {
+                if (!this.dm.hasOnlyOneState())
+                    // forall i. confi' = confi - exitedi + enteredi
+                    this.addConfConstraints(tfqn, body);
+
+                // forall i : takeni' = {t1}
+                this.addTransTakenConstraints(tfqn, body);
+
+                // System.out.println("here23");
+                // System.out.println(body);
+
+                AlloyExpr c1 = this.case1(tfqn);
+                AlloyExpr c2 = this.case2(tfqn);
+                AlloyExpr c3 = this.case3(tfqn);
+                AlloyExpr c4 = this.case4(tfqn);
+
+                AlloyExpr stableTrueAndScopesUsedEmpty;
+                if (this.dm.hasConcurrency()) {
+                    List<AlloyExpr> scopesUsedEmpty = this.dsl.emptyExprList();
+
+                    for (int i = 0; i <= this.dm.maxDepthParams(); i++) {
+                        scopesUsedEmpty.add(
+                                AlloyEqual(this.dsl.nextScopesUsed(i), this.dsl.noneArrow(i)));
+                    }
+                    stableTrueAndScopesUsedEmpty =
+                            AlloyAnd(this.dsl.nextStableTrue(), AlloyAndList(scopesUsedEmpty));
+                } else {
+                    stableTrueAndScopesUsedEmpty = this.dsl.nextStableTrue();
+                }
+
+                AlloyExpr envNoChange = this.envNoChange(tfqn);
+
+                AlloyExpr stableFalseAndEnvNoChange =
+                        AlloyAnd(this.dsl.nextStableFalse(), envNoChange);
+
+                // System.out.println("here24");
+                // System.out.println(body);
+                // big ITE is simplified for boolean/True, boolean/False
+                // b/c Alloy does not allow those as "formulas"
+                if (this.dm.hasConcurrency()) {
+                    body.add(
+                            AlloyIte(
+                                    this.testIfNextStableCall(tfqn),
+                                    AlloyAnd(
+                                            stableTrueAndScopesUsedEmpty,
+                                            AlloyIte(this.dsl.curStableTrue(), c1, c2)),
+                                    AlloyAnd(
+                                            stableFalseAndEnvNoChange,
+                                            AlloyIte(this.dsl.curStableTrue(), c3, c4))));
+                }
+            }
+            this.am.addPred(D2AStrings.postName(tout), this.dsl.curNextParamsDecls(prs), body);
         }
-
-        AlloyExpr envNoChange = this.envNoChange(tfqn);
-
-        AlloyExpr stableFalseAndEnvNoChange = AlloyAnd(this.dsl.nextStableFalse(), envNoChange);
-
-        // System.out.println("here24");
-        // System.out.println(body);
-        // big ITE is simplified for boolean/True, boolean/False
-        // b/c Alloy does not allow those as "formulas"
-        if (this.dm.hasConcurrency()) {
-            body.add(
-                    AlloyIte(
-                            this.testIfNextStableCall(tfqn),
-                            AlloyAnd(
-                                    stableTrueAndScopesUsedEmpty,
-                                    AlloyIte(this.dsl.curStableTrue(), c1, c2)),
-                            AlloyAnd(
-                                    stableFalseAndEnvNoChange,
-                                    AlloyIte(this.dsl.curStableTrue(), c3, c4))));
-        }
-        this.am.addPred(D2AStrings.postName(tout), this.dsl.curNextParamsDecls(prs), body);
     }
 
     public AlloyExpr AlloyVarDoesNotChange(String x) {

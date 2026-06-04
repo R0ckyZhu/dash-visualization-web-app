@@ -1,0 +1,74 @@
+// this version of the bit counter is based only on events
+
+// On the external event input of Tk
+// the bit counter increases the number it represents by 1 and when it has completed this task, it generates the event Done
+
+// there is a concurrent state for the FirstBit, which
+// responds to event Tk
+// the rest of sisters respond to their own Flip event
+
+// first big step is on Tk: 0/Bit0 -> 0/Bit1
+// second big step is Tk, Flip1: FirstBit/Bit1 -> FirstBit/Bit0, PID0/Bit0 -> PID0/Bit1 (two small steps)
+// third big step is Tk: FirstBit/Bit0 -> FirstBit/Bit1
+// fourth big step is Tk, Flip1, Flip2: FirstBit/Bit1 -> FirstBit/Bit0, PID0/Bit1 -> PID0/Bit1, PID1/Bit1 -> PID1/Bit1
+// etc
+// last big step is Tk, Flip1, Flip2, ..., Flipn, Done: FirstBit/Bit1 -> FirstBit/Bit0, PID0/Bit1 -> PID0/Bit1, PID1/Bit1 -> PID1/Bit1, ... PIDn/Bit1 -> PIDn/Bit1
+
+// for PID of size n, Done is generated after n+2 bigsteps of Tk input
+
+// arrange the sister bits in a linear order
+// PID can not be empty
+open util/ordering[PID] as PID
+
+sig PID {}
+
+state Counter {
+	// external event makes the bit counter increase
+	env event Tk {}
+	// event generated when it has finished incrementing the bit counter by 1	
+	event Done {}
+	conc FirstBit {
+		default state Bit0 {
+			trans ZeroToOne {
+				on Tk
+				goto Bit1
+			}
+		}
+		state Bit1 {
+			trans OneToZero {
+				on Tk
+				goto Bit0
+				send Bit[PID/first]/Flip
+			}
+			trans OneToZeroNoOtherBits {
+				on Tk
+				goto Bit0
+				send Done
+			}
+		}
+	}
+	// all the intermediate bits
+	conc Bit [PID] {
+		event Flip {}
+		default state Bit0 {
+			trans ZeroToOne {
+				on Flip
+				goto Bit1
+			}
+		}
+		state Bit1 {
+			trans OneToZero {
+				on Flip
+				when thisBit !in PID/last
+				goto Bit0
+				send Bit[PID/next[thisBit]]/Flip
+			}
+			trans LastBit {
+				on Flip
+				when thisBit in PID/last
+				goto Bit0
+				send Done
+			}
+		}
+	}
+}

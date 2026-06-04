@@ -103,49 +103,161 @@
     /* Loading overlay */
     #loading { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #4fc3f7; font-size: 16px; }
     #loading.active { display: block; }
+
+    /* ───────────────────────── New shell (3-tab) ───────────────────────── */
+    .wordmark { font-size:16px; font-weight:700; color:#fff; letter-spacing:.5px; margin-right:6px; }
+    .wordmark .dot { color:#4fc3f7; }
+    .tabs { display:flex; gap:2px; background:#0f1923; border:1px solid #2a4a6b; border-radius:7px; padding:3px; }
+    .tab { display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:5px; color:#78909c; cursor:pointer; font-size:13px; user-select:none; }
+    .tab:hover { color:#cfd8dc; }
+    .tab.active { background:#1e3a5f; color:#4fc3f7; }
+    .tab svg { width:14px; height:14px; }
+    .run-pill { align-items:center; gap:8px; padding:5px 14px; background:#0f1923; border:1px solid #2a4a6b; border-radius:14px; font-size:12px; color:#cfd8dc; cursor:pointer; white-space:nowrap; }
+    .run-pill .model { color:#4fc3f7; font-weight:600; }
+    .run-pill .scopes { color:#78909c; }
+    .spacer { flex:1; }
+    .step-group { display:flex; gap:6px; align-items:center; padding:0 8px; border-left:1px solid #1e3a5f; }
+    .open-wrap { position:relative; }
+    .open-btn { display:flex; align-items:center; background:#1b8a3a; border:1px solid #2e7d32; border-radius:6px; overflow:hidden; }
+    .open-main { padding:6px 14px; font-size:13px; font-weight:600; cursor:pointer; color:#fff; }
+    .open-caret { padding:6px 8px; border-left:1px solid #2e7d32; cursor:pointer; color:#fff; }
+    .open-menu { display:none; position:absolute; top:38px; right:0; width:300px; max-height:380px; overflow-y:auto; background:#16213e; border:1px solid #2a4a6b; border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.5); z-index:100; padding:6px 0; }
+    .open-menu.open { display:block; }
+    .open-menu .top-item { padding:8px 14px; font-size:13px; color:#e0e0e0; cursor:pointer; }
+    .open-menu .top-item:hover { background:#1e3a5f; }
+    .open-menu .divider { height:1px; background:#1e3a5f; margin:6px 0; }
+    .open-menu .grp { padding:7px 14px 3px; font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:#78909c; }
+    .open-menu .ex { padding:5px 14px 5px 22px; font-size:12.5px; color:#cfd8dc; cursor:pointer; }
+    .open-menu .ex:hover { background:#1e3a5f; color:#4fc3f7; }
+
+    /* View system */
+    #views { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+    .view { flex:1; display:none; flex-direction:column; min-height:0; }
+    .view.active { display:flex; }
+
+    /* Simulation view graph-control bar */
+    #sim-toolbar { display:flex; align-items:center; gap:8px; padding:6px 16px; background:#16213e; border-bottom:1px solid #1e3a5f; flex-shrink:0; }
+    #sim-toolbar button { padding:5px 12px; background:#1e3a5f; border:1px solid #2a4a6b; border-radius:4px; color:#e0e0e0; cursor:pointer; font-size:13px; }
+    #sim-toolbar button:hover { background:#2a4a6b; }
+    #sim-toolbar button:disabled { opacity:.4; cursor:default; }
+
+    /* Detail panel: slide in from the LEFT as an overlay over the graph */
+    #main { position: relative; }
+    #detail-panel { display:block; position:absolute; top:0; left:0; bottom:0; width:300px; border-left:none; border-right:1px solid #1e3a5f; z-index:6; box-shadow:6px 0 18px rgba(0,0,0,.4); transform:translateX(-100%); transition:transform .15s ease; }
+    #detail-panel.open { transform:translateX(0); }
+
+    /* Events & Variables view */
+    #view-tables { overflow:auto; padding:16px; }
+    .tbl-empty { color:#78909c; font-size:13px; padding:20px; }
+    table.data { border-collapse:collapse; margin-bottom:22px; font-size:12.5px; }
+    table.data caption { text-align:left; font-size:13px; font-weight:700; color:#4fc3f7; padding:6px 0; }
+    table.data th, table.data td { border:1px solid #1e3a5f; padding:5px 12px; text-align:left; white-space:nowrap; }
+    table.data thead th { background:#1e3a5f; color:#cfd8dc; cursor:pointer; }
+    table.data thead th.step:hover { color:#4fc3f7; }
+    table.data thead th.active-step { color:#f9a825; }
+    table.data tbody th { background:#16213e; color:#cfd8dc; font-weight:600; }
+    table.data td { color:#b0bec5; }
+    table.data td.taken { color:#00e676; }
+    table.data td.unstable { color:#ff9800; }
+    table.data.solver-table th { vertical-align:top; }
+    pre.solver-cell { margin:0; font-family:'Consolas','Monaco',monospace; font-size:11px; line-height:1.45; color:#b0bec5; white-space:pre-wrap; word-break:break-word; max-height:280px; overflow:auto; min-width:360px; max-width:720px; background:#0d1520; padding:8px 10px; border-radius:4px; scrollbar-width:thin; scrollbar-color:#2a4a6b transparent; }
+
+    /* Model Source view */
+    #view-source { padding:0; }
+    .source-row { flex:1; display:flex; min-height:0; }
+    .src-pane { flex:1; display:flex; flex-direction:column; min-width:0; border-right:1px solid #1e3a5f; }
+    .src-pane:last-child { border-right:none; }
+    .src-head { padding:7px 14px; font-size:12px; font-weight:700; background:#16213e; border-bottom:1px solid #1e3a5f; display:flex; gap:8px; align-items:center; }
+    .src-head .ext { color:#4fc3f7; }
+    .src-head .fn { color:#78909c; font-weight:400; font-size:11px; }
+    .src-pane pre { flex:1; overflow:auto; margin:0; padding:12px 14px; font-family:'Consolas','Monaco',monospace; font-size:12px; line-height:1.55; color:#cdd6e0; background:#0d1520; white-space:pre; }
+    .src-empty { color:#78909c; font-size:13px; padding:20px; }
   </style>
 </head>
 <body>
   <div id="toolbar">
-    <input type="text" id="file-path" placeholder="Path to .dsh file (e.g., C:\path\to\model.dsh)" />
-    <button class="primary" id="btn-load">Load</button>
-    <span class="sep">|</span>
-    <button id="btn-fit" disabled>Fit</button>
-    <button id="btn-zoom-in" disabled>+</button>
-    <button id="btn-zoom-out" disabled>-</button>
-    <button id="btn-export" disabled>PNG</button>
-    <span class="sep">|</span>
-    <button class="sim" id="btn-simulate" disabled>Simulate</button>
-    <button id="btn-step" disabled>Step</button>
-    <button id="btn-alt" disabled>Alt</button>
-    <span id="status">No model loaded</span>
-  </div>
-  <div id="main">
-    <div id="cy">
-      <div id="loading">Loading model...</div>
-    </div>
-    <div id="detail-panel">
-      <button id="detail-close">&times;</button>
-      <div id="detail-content"></div>
-    </div>
-    <div id="trace-panel">
-      <div id="trace-panel-header">
-        <h4>State Tree</h4>
-        <button id="trace-panel-close">&times;</button>
+    <div class="wordmark">Dash<span class="dot">Viz</span></div>
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-view="simulation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="8" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h4M6.5 10v4"/></svg>
+        Simulation
       </div>
-      <div id="trace-cy"></div>
+      <div class="tab" data-view="tables">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M9 4v16"/></svg>
+        Events &amp; Variables
+      </div>
+      <div class="tab" data-view="source">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6l-4 6 4 6M16 6l4 6-4 6"/></svg>
+        Model Source
+      </div>
+    </div>
+    <div class="run-pill" id="run-pill" style="display:none"></div>
+    <span class="spacer"></span>
+    <div class="step-group">
+      <button class="sim" id="btn-simulate" disabled>Simulate</button>
+      <button id="btn-alt-init" disabled title="Find an alternate initial state">Alt Init</button>
+      <button id="btn-step" disabled>Step</button>
+      <button id="btn-alt" disabled>Alt</button>
+    </div>
+    <div class="open-wrap">
+      <div class="open-btn">
+        <div class="open-main" id="btn-open">Open</div>
+        <div class="open-caret" id="btn-open-caret">▾</div>
+      </div>
+      <div class="open-menu" id="open-menu"></div>
     </div>
   </div>
-  <div id="timeline">
-    <div id="timeline-header">
-      <h4>Trace</h4>
-      <button id="timeline-close">&times;</button>
+
+  <div id="views">
+    <!-- ══ Simulation view ══ -->
+    <div id="view-simulation" class="view active">
+      <div id="sim-toolbar">
+        <button id="btn-fit" disabled>Fit</button>
+        <button id="btn-zoom-in" disabled>+</button>
+        <button id="btn-zoom-out" disabled>-</button>
+        <button id="btn-export" disabled>PNG</button>
+        <span id="status">No model loaded</span>
+      </div>
+      <div id="main">
+        <div id="cy">
+          <div id="loading">Loading model...</div>
+        </div>
+        <div id="detail-panel">
+          <button id="detail-close">&times;</button>
+          <div id="detail-content"></div>
+        </div>
+        <div id="trace-panel">
+          <div id="trace-panel-header">
+            <h4>State Tree</h4>
+            <button id="trace-panel-close">&times;</button>
+          </div>
+          <div id="trace-cy"></div>
+        </div>
+      </div>
+      <div id="timeline">
+        <div id="timeline-header">
+          <h4>Trace</h4>
+          <button id="timeline-close">&times;</button>
+        </div>
+        <div id="trace-path"></div>
+        <div id="timeline-info">
+          <div class="info-section"><span class="info-label">Transition:</span> <span id="info-transition">—</span></div>
+          <div class="info-section"><span class="info-label">Stable:</span> <span id="info-stable">—</span></div>
+          <div class="info-section"><span class="info-label">Variables:</span> <span id="info-vars">—</span></div>
+        </div>
+      </div>
     </div>
-    <div id="trace-path"></div>
-    <div id="timeline-info">
-      <div class="info-section"><span class="info-label">Transition:</span> <span id="info-transition">—</span></div>
-      <div class="info-section"><span class="info-label">Stable:</span> <span id="info-stable">—</span></div>
-      <div class="info-section"><span class="info-label">Variables:</span> <span id="info-vars">—</span></div>
+
+    <!-- ══ Events & Variables view ══ -->
+    <div id="view-tables" class="view">
+      <div id="tables-content"><div class="tbl-empty">No trace yet. Load a model and run Simulate or Step.</div></div>
+    </div>
+
+    <!-- ══ Model Source view ══ -->
+    <div id="view-source" class="view">
+      <div class="source-row" id="source-content">
+        <div class="src-empty">No model loaded.</div>
+      </div>
     </div>
   </div>
   <div id="solver-info-popup"></div>
@@ -257,6 +369,15 @@
     if (!resp.ok) {
       const err = await resp.json();
       throw new Error(err.detail || 'Failed to get next solution');
+    }
+    return resp.json();
+  }
+
+  async function nextInitSolution() {
+    const resp = await fetch(`${API}/api/solution/next-init`, { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to get alternate initial state');
     }
     return resp.json();
   }
@@ -1532,6 +1653,7 @@
     document.getElementById('timeline').classList.remove('open');
     document.getElementById('trace-panel').classList.remove('open');
     document.getElementById('btn-alt').disabled = true;
+    document.getElementById('btn-alt-init').disabled = true;
   }
 
   /**
@@ -1615,18 +1737,19 @@
     currentStateNodeId = node.id;
     lastStepStartNode = null; // no step taken yet
 
-    // Show timeline and enable Step
+    // Show timeline and enable Step + Alt Init
     tracePath = [{ nodeId: node.id, transition: null }];
     updateTracePath();
     document.getElementById('timeline').classList.add('open');
     document.getElementById('btn-alt').disabled = true;
+    document.getElementById('btn-alt-init').disabled = false;
     document.getElementById('btn-step').disabled = false;
 
     // Render state tree and highlight S1
     renderTraceGraph();
     applyStateNode(node.id);
 
-    setStatus(`Initial state ${node.label} found. Click Step to explore transitions.`);
+    setStatus(`Initial state ${node.label} found. Click Step to explore transitions, or Alt Init for a different initial state.`);
   }
 
   /**
@@ -2080,6 +2203,9 @@
     requestAnimationFrame(() => {
       container.scrollLeft = container.scrollWidth;
     });
+
+    // Keep the Events & Variables tables in sync with the trace.
+    renderTables();
   }
 
   /**
@@ -2120,20 +2246,40 @@
     appState.model = expandedModel;
     renderGraph(appState.model);
     setButtons(true);
+    updateRunPill();
     setStatus('Finding initial state...');
     const solution = await initModel(currentSigScopes);
     handleInitSolution(solution, appState.model);
   }
 
   // ── Event Handlers ──
-  document.getElementById('btn-load').addEventListener('click', async () => {
-    const filePath = document.getElementById('file-path').value.trim();
+  // Load a model from an absolute .dsh path (used by the Open menu + Examples).
+  async function loadModelFromPath(filePath) {
     if (!filePath) return;
 
+    // ── End any previous session: tear down trace, graph, selection and cached
+    // state so the newly opened model starts from a clean slate. ──
+    clearTrace();
+    clearSelection();
+    if (cy) { cy.destroy(); cy = null; }
+    currentStateNodeId = null;
+    lastStepStartNode = null;
+    appState.model = null;
+    appState.rawModel = null;
+    appState.filePath = filePath;
+    currentSigScopes = {};
+    currentScopeSigs = [];
+    sourceCache = null;
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('cy').innerHTML = '<div id="loading">Loading model...</div>';
+    document.getElementById('tables-content').innerHTML =
+      '<div class="tbl-empty">No trace yet. Run Simulate or Step.</div>';
+    document.getElementById('source-content').innerHTML =
+      '<div class="src-empty">No model loaded.</div>';
+
+    setActiveView('simulation');
     setStatus('Inspecting model...');
     document.getElementById('loading').classList.add('active');
-    document.getElementById('btn-load').disabled = true;
-    clearTrace();
 
     try {
       const inspected = await inspectModel(filePath);
@@ -2142,6 +2288,7 @@
       appState.status = 'loaded';
       currentScopeSigs = inspected.scopeSigs || [];
       document.getElementById('loading').classList.remove('active');
+      updateRunPill();
       if (currentScopeSigs.length > 0) {
         setButtons(false);
         showScopeDialog(currentScopeSigs);
@@ -2153,14 +2300,8 @@
       document.getElementById('loading').classList.remove('active');
       setStatus('Error: ' + err.message);
       appState.status = 'error';
-    } finally {
-      document.getElementById('btn-load').disabled = false;
     }
-  });
-
-  document.getElementById('file-path').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('btn-load').click();
-  });
+  }
 
   document.getElementById('btn-fit').addEventListener('click', () => cy && cy.fit(null, 30));
   document.getElementById('btn-zoom-in').addEventListener('click', () => cy && cy.zoom(cy.zoom() * 1.3));
@@ -2256,6 +2397,31 @@
   document.getElementById('scope-dialog').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('scope-run').click();
     else if (e.key === 'Escape') document.getElementById('scope-cancel').click();
+  });
+
+  // Alt Init — ask the solver for a different initial state.
+  // Uses a dedicated next-init endpoint that enumerates from the init-specific
+  // A4Solution, so it always walks init alternatives even after steps have been taken.
+  document.getElementById('btn-alt-init').addEventListener('click', async () => {
+    if (!appState.model) return;
+
+    setStatus('Finding alternate initial state...');
+    document.getElementById('btn-alt-init').disabled = true;
+    clearTrace();
+
+    try {
+      const solution = await nextInitSolution();
+      if (!solution.satisfiable) {
+        setStatus('No more alternate initial states available.');
+        document.getElementById('btn-alt-init').disabled = true;
+        return;
+      }
+      // Replace S1 with the new initial state — rebuild the whole trace from scratch
+      handleInitSolution(solution, appState.model);
+    } catch (err) {
+      setStatus('Alt Init error: ' + err.message);
+      document.getElementById('btn-alt-init').disabled = false;
+    }
   });
 
   // Step from current state node
@@ -2360,6 +2526,251 @@
   document.getElementById('trace-panel-close').addEventListener('click', () => {
     document.getElementById('trace-panel').classList.remove('open');
   });
+
+  // ══════════════════════════════════════════
+  // ── Shell: view tabs, Open menu, run pill ──
+  // ══════════════════════════════════════════
+  let activeView = 'simulation';
+  let sourceCache = null; // {dsh, als} for the currently loaded model
+
+  function setActiveView(name) {
+    activeView = name;
+    document.querySelectorAll('#tabs .tab').forEach(t =>
+      t.classList.toggle('active', t.dataset.view === name));
+    document.querySelectorAll('.view').forEach(v =>
+      v.classList.toggle('active', v.id === 'view-' + name));
+
+    if (name === 'simulation' && cy) {
+      // Cytoscape needs a resize after being shown from display:none
+      setTimeout(() => { cy.resize(); cy.fit(null, 30); if (traceCy) { traceCy.resize(); traceCy.fit(null, 20); } }, 30);
+    } else if (name === 'tables') {
+      renderTables();
+    } else if (name === 'source') {
+      loadSource();
+    }
+  }
+
+  document.querySelectorAll('#tabs .tab').forEach(tab => {
+    tab.addEventListener('click', () => setActiveView(tab.dataset.view));
+  });
+
+  function updateRunPill() {
+    const pill = document.getElementById('run-pill');
+    if (!appState.model) { pill.style.display = 'none'; return; }
+    const name = appState.model.rootName || 'model';
+    const scopeStr = Object.entries(currentSigScopes || {})
+      .map(([k, v]) => `${k}=${v}`).join(', ');
+    pill.innerHTML = `<span class="model">${escapeHtml(name)}</span>` +
+      (scopeStr ? ` <span class="scopes">· ${escapeHtml(scopeStr)}</span>` : '');
+    pill.style.display = 'flex';
+  }
+
+  // ── Open menu (Open .dsh… + grouped case-study examples) ──
+  const openMenu = document.getElementById('open-menu');
+  let examplesLoaded = false;
+
+  async function loadExamples() {
+    if (examplesLoaded) return;
+    try {
+      const resp = await fetch(`${API}/api/examples`);
+      const data = await resp.json();
+      renderOpenMenu(data.examples || []);
+      examplesLoaded = true;
+    } catch (err) {
+      openMenu.innerHTML = `<div class="grp">Failed to load examples: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function renderOpenMenu(examples) {
+    const groups = {};
+    for (const ex of examples) {
+      (groups[ex.group] = groups[ex.group] || []).push(ex);
+    }
+    let html = '<div class="top-item" id="open-dsh">📂 Open .dsh… (paste path)</div><div class="divider"></div>';
+    for (const [group, items] of Object.entries(groups)) {
+      html += `<div class="grp">${escapeHtml(group)}</div>`;
+      for (const ex of items) {
+        html += `<div class="ex" data-path="${escapeHtml(ex.path)}">${escapeHtml(ex.name)}</div>`;
+      }
+    }
+    openMenu.innerHTML = html;
+
+    openMenu.querySelector('#open-dsh').addEventListener('click', () => {
+      closeOpenMenu();
+      const p = prompt('Paste the absolute path to a .dsh file:');
+      if (p && p.trim()) loadModelFromPath(p.trim());
+    });
+    openMenu.querySelectorAll('.ex').forEach(el => {
+      el.addEventListener('click', () => {
+        closeOpenMenu();
+        loadModelFromPath(el.dataset.path);
+      });
+    });
+  }
+
+  function toggleOpenMenu() {
+    if (openMenu.classList.contains('open')) { closeOpenMenu(); return; }
+    loadExamples();
+    openMenu.classList.add('open');
+  }
+  function closeOpenMenu() { openMenu.classList.remove('open'); }
+
+  document.getElementById('btn-open').addEventListener('click', toggleOpenMenu);
+  document.getElementById('btn-open-caret').addEventListener('click', toggleOpenMenu);
+  document.addEventListener('mousedown', e => {
+    if (openMenu.classList.contains('open') &&
+        !openMenu.contains(e.target) &&
+        !e.target.closest('.open-btn')) {
+      closeOpenMenu();
+    }
+  });
+
+  // ══════════════════════════════════════════
+  // ── Events & Variables tables ──
+  // ══════════════════════════════════════════
+  /**
+   * Build the per-step tables from the linear trace path (tracePath) and the
+   * StateNodes it references. Columns are trace steps S1…Sn; rows are variables
+   * (incl. parameterized) and, in a second table, the transitions taken.
+   */
+  function renderTables() {
+    const container = document.getElementById('tables-content');
+    if (!stateGraph || !tracePath || tracePath.length === 0) {
+      container.innerHTML = '<div class="tbl-empty">No trace yet. Run Simulate or Step.</div>';
+      return;
+    }
+
+    // Resolve the StateNode for each step of the path.
+    const steps = tracePath.map((entry, i) => {
+      const sn = stateGraph.nodes.find(n => n.id === entry.nodeId);
+      return { i, entry, sn };
+    }).filter(s => s.sn);
+
+    // Collect the union of variable keys across all steps (stable column order).
+    const varKeys = [];
+    const seen = new Set();
+    for (const s of steps) {
+      for (const k of Object.keys(s.sn.vars)) {
+        if (!seen.has(k)) { seen.add(k); varKeys.push(k); }
+      }
+    }
+    varKeys.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    // Partition snapshot fields into event sets (events0, events1, …) and user
+    // variables, so each gets its own per-snapshot table.
+    const isEventKey = k => /^_*events\d*$/i.test(k.split('/').pop().replace(/\[.*\]$/, ''));
+    const eventKeys = varKeys.filter(isEventKey);
+    const realVarKeys = varKeys.filter(k => !isEventKey(k));
+
+    // One column per snapshot in the trace.
+    const stepHeader = steps.map(s => {
+      const active = s.entry.nodeId === currentStateNodeId ? ' active-step' : '';
+      return `<th class="step${active}" data-node="${s.sn.id}" data-trans="${escapeHtml(s.entry.transition || '')}">${escapeHtml(s.sn.label)}</th>`;
+    }).join('');
+
+    // Render a row per field, one cell per snapshot showing that field's value.
+    const valueRows = (keys) => keys.map(k => {
+      const cells = steps.map(s => {
+        const v = s.sn.vars[k];
+        const txt = (v === undefined) ? '·' : formatVarValue(v);
+        return `<td>${escapeHtml(txt)}</td>`;
+      }).join('');
+      return `<tr><th>${escapeHtml(k.split('/').pop())}</th>${cells}</tr>`;
+    }).join('');
+
+    // ── Variables (per snapshot) ──
+    const varsTable = realVarKeys.length === 0
+      ? '<table class="data"><caption>Variables</caption><tbody><tr><td class="tbl-empty">No variables in this model.</td></tr></tbody></table>'
+      : `<table class="data"><caption>Variables</caption>
+          <thead><tr><th>Variable</th>${stepHeader}</tr></thead>
+          <tbody>${valueRows(realVarKeys)}</tbody></table>`;
+
+    // ── Events (per snapshot) ──
+    const eventsValTable = eventKeys.length === 0
+      ? ''
+      : `<table class="data"><caption>Events</caption>
+          <thead><tr><th>Event set</th>${stepHeader}</tr></thead>
+          <tbody>${valueRows(eventKeys)}</tbody></table>`;
+
+    // ── Transition / stability / configuration (per snapshot) ──
+    const evRows = steps.map(s => {
+      const trans = s.entry.transition || s.sn.takenTransition;
+      const transTxt = trans ? trans.split('/').pop() : '—';
+      const stableCls = s.sn.stable ? '' : ' class="unstable"';
+      return `<tr>
+        <th>${escapeHtml(s.sn.label)}</th>
+        <td class="taken">${escapeHtml(transTxt)}</td>
+        <td${stableCls}>${s.sn.stable ? 'Yes' : 'No'}</td>
+        <td>${s.sn.activeStates.map(a => escapeHtml(a.split('/').pop())).join(', ')}</td>
+      </tr>`;
+    }).join('');
+    const transTable = `<table class="data"><caption>Transitions &amp; Configuration</caption>
+      <thead><tr><th>Step</th><th>Transition taken</th><th>Stable</th><th>Active states</th></tr></thead>
+      <tbody>${evRows}</tbody></table>`;
+
+    // ── Raw solver response (per snapshot) ──
+    // node.rawState is the unmodified snapshot object the backend/solver returned
+    // (one element of solution.snapshots) — presented verbatim as pretty JSON.
+    const solverRows = steps.map(s => {
+      const raw = (s.sn.rawState && Object.keys(s.sn.rawState).length)
+        ? JSON.stringify(s.sn.rawState, null, 2)
+        : '(no raw solver data for this snapshot)';
+      const active = s.entry.nodeId === currentStateNodeId ? ' class="active-step"' : '';
+      return `<tr><th${active}>${escapeHtml(s.sn.label)}</th><td><pre class="solver-cell">${escapeHtml(raw)}</pre></td></tr>`;
+    }).join('');
+    const solverTable = `<table class="data solver-table"><caption>Solver Response — raw (per snapshot)</caption>
+      <thead><tr><th>Step</th><th>Raw solver response</th></tr></thead>
+      <tbody>${solverRows}</tbody></table>`;
+
+    container.innerHTML = eventsValTable + varsTable + transTable + solverTable;
+
+    // Clicking a step column header cross-highlights the Simulation graphs.
+    container.querySelectorAll('thead th.step').forEach(th => {
+      th.addEventListener('click', () => {
+        const nodeId = parseInt(th.dataset.node, 10);
+        const trans = th.dataset.trans || null;
+        applyStateNode(nodeId, trans);
+        renderTables(); // refresh active-step highlight
+      });
+    });
+  }
+
+  // ══════════════════════════════════════════
+  // ── Model Source (.dsh + .als) ──
+  // ══════════════════════════════════════════
+  async function loadSource() {
+    const container = document.getElementById('source-content');
+    if (!appState.model) {
+      container.innerHTML = '<div class="src-empty">No model loaded.</div>';
+      return;
+    }
+    if (sourceCache) { renderSource(sourceCache); return; }
+    container.innerHTML = '<div class="src-empty">Loading source…</div>';
+    try {
+      const resp = await fetch(`${API}/api/source`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to load source');
+      }
+      sourceCache = await resp.json();
+      renderSource(sourceCache);
+    } catch (err) {
+      container.innerHTML = `<div class="src-empty">Error: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function renderSource(src) {
+    const fileName = (src.file || '').split(/[\\/]/).pop();
+    document.getElementById('source-content').innerHTML = `
+      <div class="src-pane">
+        <div class="src-head"><span class="ext">.dsh</span><span class="fn">${escapeHtml(fileName)}</span></div>
+        <pre>${escapeHtml(src.dsh || '')}</pre>
+      </div>
+      <div class="src-pane">
+        <div class="src-head"><span class="ext">.als</span><span class="fn">translated Alloy</span></div>
+        <pre>${escapeHtml(src.als || '')}</pre>
+      </div>`;
+  }
   </script>
 </body>
 </html>

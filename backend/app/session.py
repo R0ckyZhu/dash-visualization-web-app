@@ -31,20 +31,26 @@ class SessionManager:
     async def execute(self, cmd_idx: int = -1) -> dict:
         return await self.bridge.send_command("execute", {"cmdIdx": cmd_idx})
 
-    async def init(self, sig_scopes: dict[str, int] | None = None) -> dict:
+    async def init(self, sig_scopes: dict[str, int] | None = None,
+                   extra_facts: list[str] | None = None) -> dict:
         params = {}
         if sig_scopes:
             params["sigScopes"] = sig_scopes
+        if extra_facts:
+            params["extraFacts"] = extra_facts
         return await self.bridge.send_command("init", params if params else None)
 
     async def next_solution(self) -> dict:
         return await self.bridge.send_command("next")
 
     async def step(self, state: dict,
-                   sig_scopes: dict[str, int] | None = None) -> dict:
+                   sig_scopes: dict[str, int] | None = None,
+                   extra_facts: list[str] | None = None) -> dict:
         # Step uses a single fixed scope on the Java side (exactly 2 __Snapshots);
         # no iterative scope search.
         params = {"state": state}
         if sig_scopes:
             params["sigScopes"] = sig_scopes
+        if extra_facts:
+            params["extraFacts"] = extra_facts
         return await self.bridge.send_command("step", params)
