@@ -40,11 +40,7 @@ state Counter {
 				goto Bit0
 				send Bit[PID/first]/Flip
 			}
-			trans OneToZeroNoOtherBits {
-				on Tk
-				goto Bit0
-				send Done
-			}
+			
 		}
 	}
 	// all the intermediate bits
