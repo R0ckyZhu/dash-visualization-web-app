@@ -17,47 +17,34 @@ The backend spawns the `dashplus` JAR as a long-lived subprocess and communicate
 - Java >= 25
 - Python >= 3.11
 
-## Build
+## Getting Started
 
-### 1. Build the Java engine
+### 1. Build the JAR
 
 ```sh
 cd dashplus
 ./gradlew sessionServerJar
 ```
 
-This produces `dashplus/app/build/libs/dashplus-session-server.jar`. Gradle 9.1.0 is downloaded automatically by the wrapper.
-
 On Windows cmd, use `gradlew sessionServerJar` (no `./`).
 
-### 2. Install the Python backend
+### 2. Install the backend
 
 ```sh
 cd backend
 pip install .
 ```
 
-## Run
+### 3. Run the backend
 
 ```sh
 cd backend
-dash-viz
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-The server starts at `http://127.0.0.1:8000` and serves both the API and the frontend.
+### 4. Open the app
 
-To point at a custom JAR location, set the `DASHPLUS_JAR` environment variable:
-
-```sh
-DASHPLUS_JAR=/path/to/dashplus-session-server.jar dash-viz
-```
-
-## Usage
-
-1. Open `http://127.0.0.1:8000` in a browser.
-2. Enter a path to a `.dsh` file or pick one from the bundled examples (elevator, traffic light, mutex, leader election, etc.).
-3. Click **Simulate** to find a valid initial state.
-4. Click **Step** to advance the simulation, or **Alt** to explore alternative solutions.
+Go to [http://localhost:8000](http://localhost:8000) in your browser.
 
 ## Bundled Examples
 
