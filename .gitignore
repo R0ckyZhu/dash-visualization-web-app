@@ -5,6 +5,13 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration and credentials
+.env
+.env.*
 
 # Java / Gradle
 .gradle/
@@ -28,17 +35,20 @@ Thumbs.db
 
 # Node
 node_modules/
+*.tsbuildinfo
+.pnpm-store/
+
+# frontend/dist is deliberately committed so the app can be run with only
+# Java and Python. Rebuild it with `pnpm run build` before committing frontend
+# changes, or the served app will lag the source.
 
 # Runtime artifacts
 *.pid
 backend/repro_*.py
+*-traces-tmp.als
+
+# Debug als dumps
+**/als-compare/
 
 # Claude
 .claude/
-
-# Test artifacts
-app/src/main/java/ca/uwaterloo/watform/test/catalyst/catalyst-corpus.zip
-app/src/main/java/ca/uwaterloo/watform/test/catalyst/catalyst-corpus
-app/src/main/java/ca/uwaterloo/watform/test/catalyst/timeout
-app/src/main/java/ca/uwaterloo/watform/test/catalyst/problemFiles
-app/src/main/java/ca/uwaterloo/watform/nancy-list.md

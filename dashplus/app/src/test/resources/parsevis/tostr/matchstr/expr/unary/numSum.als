@@ -1,3 +1,0 @@
-fact {
-	sum a
-}

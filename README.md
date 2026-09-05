@@ -1,51 +1,108 @@
 # Dash Visualizer
 
-A web-based tool for visualizing and interactively simulating [Dash](https://github.com/WatForm/dash-models) statechart models. Load a `.dsh` model, and step through its state space using the Alloy constraint solver — inspecting states, transitions, and variable values at each snapshot.
+Dash Visualizer is a local web application for loading, inspecting, and
+interactively simulating Dash statechart models. The active UI is written in
+React and TypeScript, FastAPI owns the browser API and session context, and a
+Java session server runs the Dash+/Alloy parser, translator, and solver.
+
+## Features
+
+- Load a built-in case study or a local `.dsh` model.
+- Configure scopes for parameterized models.
+- Initialize a simulation and explore it with Step, Alt, Alt Init, and Alt Trans.
+- Apply state, event, variable, transition, and custom Alloy constraints.
+- Inspect hierarchical statecharts, active-state overlays, and parallel edges.
+- Navigate a persistent state tree with stability coloring and selection details.
+- Compare events and variables across the current trace.
+- Inspect Dash source, translated Alloy, and generated solver fragments.
+- Ask a LLM assistant about the active model and simulation session.
 
 ## Architecture
 
-```
-frontend/        Vanilla HTML/JS UI using Cytoscape.js for graph rendering
-backend/         Python FastAPI server exposing a REST API
-dashplus/        Java engine that parses .dsh files, translates to Alloy, and runs the solver
+```text
+Browser
+  React + TypeScript + Vite
+  Cytoscape.js + ELK graph layout
+        |
+        | JSON REST + streamed SSE chat
+        v
+FastAPI backend
+  SessionManager       model and solver operations
+  SessionContextStore  revisioned model, trace, tree, and UI context
+  LLMService           read-only tools and provider-neutral orchestration
+        |
+        | newline-delimited JSON over stdin/stdout
+        v
+Java session server
+        |
+        v
+Dash+ parser/translator + Alloy solver
 ```
 
-The backend spawns the `dashplus` JAR as a long-lived subprocess and communicates via JSON over stdio. The frontend talks to the backend's REST API and renders two side-by-side graphs: a hierarchical statechart and a trace tree.
+## Repository Layout
+
+```text
+backend/          FastAPI application, LLM layer, tests, and example models
+frontend/         React application and its committed production bundle
+sessionserver/    Java JSON session server and Gradle wrapper
+```
+
+`sessionserver/libs/dashplus.jar` is the prebuilt Dash+ engine. Its provenance
+and refresh process are documented in `sessionserver/libs/README.md`.
 
 ## Prerequisites
 
-- Java >= 25
-- Python >= 3.11
+- Java 25
+- Python 3.11 or newer, already on `PATH`
 
-## Getting Started
+## Setup
 
-### 1. Build the JAR
+Run from the repository root:
 
-```sh
-cd dashplus
-./gradlew sessionServerJar
+### 1. Build the Java session server
+
+```powershell
+cd sessionserver
+.\gradlew.bat sessionServerJar
+cd ..
 ```
 
-On Windows cmd, use `gradlew sessionServerJar` (no `./`).
+On macOS or Linux, use `./gradlew sessionServerJar`. The runnable JAR is written
+to `sessionserver/build/libs/dashplus-session-server.jar`.
 
-### 2. Install the backend
+### 2. Install the Python backend
 
-```sh
-cd backend
-pip install .
+```powershell
+python -m pip install -e backend
 ```
 
-### 3. Run the backend
+The install is editable, so the running application reflects the working tree.
+If your Python is managed by the operating system, pip may refuse to install
+into it; add `--user`, or point `python` at an interpreter you control.
 
-```sh
-cd backend
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+### 3. Run the server
+
+```powershell
+python -m app.main
 ```
 
-### 4. Open the app
+Open `http://127.0.0.1:8000`. FastAPI serves both the API and the compiled
+frontend from `frontend/dist` on that port.
 
-Go to [http://localhost:8000](http://localhost:8000) in your browser.
+To use a different port, set `DASH_PORT` before starting:
 
-## Bundled Examples
+```powershell
+$env:DASH_PORT = "8010"
+python -m app.main
+```
 
-The `backend/examples/` directory contains 26+ case-study models from academic papers and theses, including elevators, bit counters, distributed spanning trees, landing gear systems, and digital watches.
+## Simulation Notes
+
+The Simulate menu supports two modes:
+
+- `simplified` forces a transition to take place between each step.
+- `raw` returns any snapshot allowed by the active model and constraints.
+
+
+
+

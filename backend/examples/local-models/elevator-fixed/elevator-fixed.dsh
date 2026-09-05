@@ -1,0 +1,279 @@
+// Elevator model — FIXED version.
+//
+// Derived from 2022-tamjid-thesis/elevator/elevator.dsh. The original leaves several
+// primed variables unconstrained, so the solver may move elevators, flip directions,
+// and shuffle pending calls on transitions that should not touch them ("drift").
+// Three classes of fixes:
+//
+//  1. Every Elevator transition now writes ALL of the acting elevator's variables
+//     (current', direction', called') — unmentioned variables are NOT auto-framed by
+//     the translation, so leaving one out lets the solver pick its value freely.
+//
+//  2. MovingUp/Idle had `do { current = min[Floor] }` — an UNPRIMED equation, i.e. a
+//     condition on the source state placed in the post, leaving current' completely
+//     free (the acting elevator could teleport). Replaced with explicit stay-put
+//     updates; parking at the ground floor is Idle/DefaultToGround's job.
+//
+//  3. Controller transitions constrained no elevator position/direction at all, so
+//     any controller step could relocate every elevator. They now frame current' and
+//     direction' of all elevators (the original already framed others' called').
+//
+// Remaining known looseness (translator-level, not expressible here): the generated
+// cross-instance frames are set-image equalities (PID.(v') = PID.(v)), which with 3+
+// elevators still admit permutations among NON-acting elevators. With the explicit
+// per-variable updates below, traces with 2 elevators are fully drift-free.
+
+open util/ordering[Floor]
+
+sig Floor {}
+abstract sig Direction {}
+one sig Up, Down extends Direction {}
+
+pred between [n1, nb, n2: Floor] {
+	     lt[n1,n2] =>   ( lt[n1,nb] && lt[nb,n2] )
+             else ( lt[n1,nb] || lt[nb,n2] )  }
+
+state System {
+	conc Controller {
+		callToSend: Floor -> Direction
+
+		default state Sending {}
+
+		// FIX 3: controller steps never move elevators or turn them around.
+		pred FrameElevators {
+			all e: PID | {
+				Elevator[e]/current' = Elevator[e]/current
+				Elevator[e]/direction' = Elevator[e]/direction
+			}
+		}
+
+		pred SendUpRequest {
+			one e0: PID, f: callToSend.Up | {
+				// The direction of the Elevator is "Up"
+				Elevator[e0]/direction = Up
+				// The elevator is below the floor that it needs to go to
+				lte[Elevator[e0]/current, f]
+				// Send the call to the elevator
+				Elevator[e0]/called' = Elevator[e0]/called + f
+				callToSend' = callToSend - (f -> Up)
+				// Elevator getting the call is the closest
+				no e1: PID - e0 | { Elevator[e1]/direction = Up and
+					between[Elevator[e0]/current, Elevator[e1]/current, f] }
+				all others: PID - e0 | Elevator[others]/called' = Elevator[others]/called
+			}
+		}
+
+		pred SendDownRequest {
+			one e0: PID, f: callToSend.Down | {
+				Elevator[e0]/direction = Down
+				gte[Elevator[e0]/current, f]
+				Elevator[e0]/called' = Elevator[e0]/called + f
+				callToSend' = callToSend - (f -> Down)
+				no e1: PID - e0 | Elevator[e1]/direction = Down and between[f, Elevator[e0]/current, Elevator[e1]/current]
+				all others: PID - e0 | Elevator[others]/called' = Elevator[others]/called
+			}
+		}
+
+		pred SendRequest {
+			one e0: PID, f: callToSend.Direction | {
+				Elevator[e0]/called' = Elevator[e0]/called + f
+				callToSend' = callToSend - (f -> f.callToSend)
+				all others: PID - e0 | Elevator[others]/called' = Elevator[others]/called
+			}
+		}
+
+		trans SendingUpRequest {
+			from Sending
+			when Up in Floor.callToSend
+			do {
+				(some p: PID, f: callToSend.Up | lte[Elevator[p]/current, f] and Elevator[p]/direction = Up) => {
+					SendUpRequest
+				} else {
+					SendRequest
+				}
+				FrameElevators
+			}
+			goto Sending
+		}
+
+		trans SendingDownRequest {
+			from Sending
+			when Down in Floor.callToSend
+			do {
+				(some p: PID, f: callToSend.Down | lte[f, Elevator[p]/current] and Elevator[p]/direction = Down) => {
+					SendDownRequest
+				} else {
+					SendRequest
+				}
+				FrameElevators
+			}
+			goto Sending
+		}
+
+		init {
+			#callToSend = 3
+			Up !in Floor.callToSend
+		}
+	}
+
+	conc Elevator [PID] {
+		direction: one Direction
+		called: set Floor
+	 	current: one Floor
+
+	       state MovingUp {
+		 	trans MoveUp {
+		        	when {
+		            		some called
+		            		direction = Up
+		            		some nexts[current] & called
+			    		current !in called
+		        	}
+		        	do {
+		            		current' = min[(nexts[current] & called)]
+		            		called' = called - current'
+		            		// FIX 1: direction was unwritten (free)
+		            		direction' = direction
+		        	}
+		   	 }
+
+			trans ElevatorInCalled {
+				when {
+					some called
+					called in current
+				}
+				do {
+					called' = called - current
+					// FIX 1: position and direction stay
+					current' = current
+					direction' = direction
+				}
+			}
+
+			trans ChangeDirToDown {
+		        	when {
+		            		some called
+					no nexts[current] & called
+					some prevs[current] & called
+					current !in called
+		        	}
+				do {
+					direction' = Down
+					// FIX 1: position and calls stay
+					current' = current
+					called' = called
+				}
+				goto MovingDown
+			}
+
+		 	trans Idle {
+				when {
+		            		no called
+		        	}
+				do {
+					// FIX 2: original had `current = min[Floor]` (unprimed) — a
+					// source-state test in the post, leaving current' free. Going
+					// idle does not move the elevator; DefaultToGround parks it.
+					current' = current
+					direction' = direction
+					called' = called
+				}
+				goto Idle
+	         	}
+	    }
+
+	    state MovingDown {
+		 	trans MoveDown {
+		        	when {
+		            		some called
+		            		direction = Down
+		            		some prevs[current] & called
+			    		current !in called
+		        	}
+		        	do {
+		            		current' = max[(prevs[current] & called)]
+		            		called' = called - current'
+		            		// FIX 1
+		            		direction' = direction
+		        	}
+		   	 }
+
+			trans ElevatorInCalled {
+				when {
+					some called
+					called in current
+				}
+				do {
+					called' = called - current
+					// FIX 1
+					current' = current
+					direction' = direction
+				}
+			}
+
+			trans ChangeDirToUp {
+		        	when {
+		            		some called
+					no prevs[current] & called
+					some nexts[current] & called
+					current !in called
+		        	}
+				do {
+					direction' = Up
+					// FIX 1
+					current' = current
+					called' = called
+				}
+				goto MovingUp
+			}
+
+		 	trans Idle {
+				when {
+		            		no called
+		        	}
+				do {
+					// FIX 1: original had no do-block at all (everything free)
+					current' = current
+					direction' = direction
+					called' = called
+				}
+				goto Idle
+	         	}
+	    }
+
+	    default state Idle {
+		 	trans DefaultToGround {
+		        	when {
+		            		no called
+		            		min[Floor] not in current
+		        	}
+		        	do {
+		        		current' = min[Floor]
+		        		// FIX 1
+		        		direction' = direction
+		        		called' = called
+		        	}
+		    	}
+
+		 	trans Move {
+		        	when {
+		            		some called
+		        	}
+		        	do {
+		        		// FIX 1: original had no do-block (everything free)
+		        		current' = current
+		        		direction' = direction
+		        		called' = called
+		        	}
+		        	goto MovingUp
+		    	}
+		}
+		init {
+			no called
+			current = min[Floor]
+			direction = Up
+		}
+	}
+
+
+}

@@ -1,3 +1,0 @@
-fact {
-	int a
-}

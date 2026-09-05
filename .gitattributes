@@ -1,0 +1,19 @@
+* text=auto
+
+*.sh text eol=lf
+# Extensionless shell script: must stay LF or it will not run on Unix.
+gradlew text eol=lf
+*.bat text eol=crlf
+*.java text eol=lf
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+
+# Committed build output: never rewrite line endings in a generated bundle.
+frontend/dist/** -text

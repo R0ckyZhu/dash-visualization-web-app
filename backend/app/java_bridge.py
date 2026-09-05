@@ -1,19 +1,22 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import subprocess
 import uuid
 from pathlib import Path
+from typing import Optional, Union
 
 logger = logging.getLogger("dash-viz.java-bridge")
 
 
 class JavaBridge:
-    def __init__(self, jar_path: str | Path):
+    def __init__(self, jar_path: Union[str, Path]):
         self.jar_path = Path(jar_path)
-        self._process: subprocess.Popen | None = None
+        self._process: Optional[subprocess.Popen] = None
         self._lock = asyncio.Lock()
-        self._stderr_task: asyncio.Task | None = None
+        self._stderr_task: Optional[asyncio.Task] = None
 
     async def start(self):
         if self._process and self._process.poll() is None:
@@ -50,7 +53,7 @@ class JavaBridge:
             except Exception:
                 break
 
-    async def send_command(self, command: str, params: dict | None = None) -> dict:
+    async def send_command(self, command: str, params: Optional[dict] = None) -> dict:
         if not self._process or self._process.poll() is not None:
             raise RuntimeError("SessionServer is not running")
 

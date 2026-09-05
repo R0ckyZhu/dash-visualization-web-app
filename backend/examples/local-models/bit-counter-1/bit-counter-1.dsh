@@ -43,7 +43,8 @@ state Counter {
 				}
 				on Flip
 				goto Bit1
-				do current' = PID/next[current]
+				// carry absorbed: increment done, next Tk is handled by the first bit
+				do current' = PID/first
 			}
 		}
 		

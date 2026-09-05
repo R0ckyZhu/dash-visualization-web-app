@@ -1,0 +1,64 @@
+/*
+ * Build for the Dash Visualizer session server.
+ *
+ * This project contains ONLY the custom session-server sources
+ * (SessionServer, CommandRouter, DashModelSerializer). It compiles against the
+ * prebuilt dashplus engine in libs/dashplus.jar — the dashplus source tree is
+ * NOT part of this repository.
+ *
+ * Build:  ./gradlew sessionServerJar
+ *
+ * See libs/README.md for how libs/dashplus.jar was produced and how to refresh
+ * it from WatForm/dashplus.
+ */
+plugins {
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+}
+
+// dashplus plus all of its runtime dependencies (Alloy, gson, guava, antlr).
+def dashplusJar = file('libs/dashplus.jar')
+
+dependencies {
+    implementation files(dashplusJar)
+}
+
+// Fail with an actionable message instead of a wall of "package does not exist".
+tasks.named('compileJava') {
+    doFirst {
+        if (!dashplusJar.exists()) {
+            throw new GradleException(
+                    "dashplus engine jar missing: ${dashplusJar}\n" +
+                    "It is committed to this repository — restore it with:\n" +
+                    "  git checkout -- sessionserver/libs/dashplus.jar")
+        }
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+// Runnable fat jar: our compiled classes + the dashplus jar's contents.
+task sessionServerJar(type: Jar) {
+    archiveBaseName.set('dashplus-session-server')
+    manifest {
+        attributes 'Main-Class': 'ca.uwaterloo.watform.sessionserver.SessionServer'
+    }
+    from sourceSets.main.output
+    from zipTree(dashplusJar)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    zip64 = true
+}
+
+// Convenience: run the server straight from stdin without building the jar.
+task sessionServer(type: JavaExec) {
+    mainClass = 'ca.uwaterloo.watform.sessionserver.SessionServer'
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+}

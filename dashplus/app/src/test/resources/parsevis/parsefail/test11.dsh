@@ -1,5 +1,0 @@
-conc Root {
-	conc A {
-		trans t1 {}
-	}
-}
