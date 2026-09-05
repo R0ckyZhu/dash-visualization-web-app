@@ -82,8 +82,7 @@ python -m pip install -e backend
 python -m app.main
 ```
 
-Open `http://127.0.0.1:8000`. FastAPI serves both the API and the compiled
-frontend from `frontend/dist` on that port.
+Open `http://127.0.0.1:8000`. 
 
 To use a different port, set `DASH_PORT` before starting:
 
