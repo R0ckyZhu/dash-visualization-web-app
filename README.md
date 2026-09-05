@@ -47,8 +47,7 @@ frontend/         React application and its committed production bundle
 sessionserver/    Java JSON session server and Gradle wrapper
 ```
 
-`sessionserver/libs/dashplus.jar` is the prebuilt Dash+ engine. Its provenance
-and refresh process are documented in `sessionserver/libs/README.md`.
+`sessionserver/libs/dashplus.jar` is the prebuilt Dash+ engine.
 
 ## Prerequisites
 
