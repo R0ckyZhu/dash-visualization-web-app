@@ -31,7 +31,7 @@ FastAPI backend
   SessionContextStore  revisioned model, trace, tree, and UI context
   LLMService           read-only tools and provider-neutral orchestration
         |
-        | newline-delimited JSON over stdin/stdout
+        | JSON over stdin/stdout
         v
 Java session server
         |
