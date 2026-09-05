@@ -76,10 +76,6 @@ to `sessionserver/build/libs/dashplus-session-server.jar`.
 python -m pip install -e backend
 ```
 
-The install is editable, so the running application reflects the working tree.
-If your Python is managed by the operating system, pip may refuse to install
-into it; add `--user`, or point `python` at an interpreter you control.
-
 ### 3. Run the server
 
 ```powershell
