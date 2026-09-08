@@ -557,7 +557,7 @@ export function StatechartGraph({
         {
           selector: "node.state",
           style: {
-            "background-color": "#2e7d32",
+            "background-color": "#253b4b",
             label: "data(label)",
             "text-valign": "center",
             "text-halign": "center",
@@ -566,7 +566,7 @@ export function StatechartGraph({
             width: 80,
             height: 40,
             "border-width": 2,
-            "border-color": "#43a047",
+            "border-color": "#68879c",
             shape: "roundrectangle"
           }
         },
@@ -595,7 +595,9 @@ export function StatechartGraph({
           selector: "node.trace-active",
           style: { "border-color": "#00e676", "border-width": 4 }
         },
-        { selector: "node.trace-inactive", style: { opacity: 0.4 } },
+        { selector: "node.trace-inactive", style: { opacity: 0.7 } },
+        { selector: "node.selected-node", style: { "border-color": "#a5d8ff", "border-width": 4, "border-style": "double" } },
+        { selector: "node.selected-node.trace-active", style: { "background-color": "#225441", "border-color": "#a5d8ff", "border-width": 6, "border-style": "double" } },
         {
           selector: "edge",
           style: {
@@ -783,7 +785,7 @@ export function StatechartGraph({
         >
           -
         </button>
-        <button onClick={exportGraph} type="button">PNG</button>
+        <button onClick={exportGraph} title="Exports the graph; event and variable HTML overlays are excluded" type="button">Export PNG</button>
         <div className="overlay-controls" aria-label="Statechart data overlays">
           <button
             className={eventsVisible ? "toggle-on" : ""}

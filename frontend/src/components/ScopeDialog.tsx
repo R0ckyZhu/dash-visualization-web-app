@@ -1,69 +1,86 @@
-import { useEffect, useRef } from "react";
-
-interface ScopeDialogProps {
-  open: boolean;
+import { useState } from "react";
+import { Modal } from "./Modal";
+export function ScopeDialog({
+  scopes,
+  scopeSigs,
+  hasRun,
+  onClose,
+  onApply,
+}: {
   scopes: Record<string, number>;
   scopeSigs: string[];
-  onChange: (sig: string, value: number) => void;
+  hasRun: boolean;
   onClose: () => void;
-  onRun: () => void;
-}
-
-function clampScope(value: number) {
-  if (!Number.isFinite(value)) return 1;
-  return Math.min(20, Math.max(1, Math.round(value)));
-}
-
-export function ScopeDialog({ open, scopes, scopeSigs, onChange, onClose, onRun }: ScopeDialogProps) {
-  const firstInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      window.setTimeout(() => firstInputRef.current?.focus(), 0);
-    }
-  }, [open]);
-
-  if (!open) return null;
-
+  onApply: (scopes: Record<string, number>, start: boolean) => void;
+}) {
+  const [draft, setDraft] = useState(() =>
+    Object.fromEntries(scopeSigs.map((sig) => [sig, String(scopes[sig] ?? 1)])),
+  );
+  const valid = scopeSigs.every(
+    (sig) =>
+      /^\d+$/.test(draft[sig]) &&
+      Number(draft[sig]) >= 1 &&
+      Number(draft[sig]) <= 20,
+  );
+  function submit(start: boolean) {
+    if (valid)
+      onApply(
+        Object.fromEntries(scopeSigs.map((sig) => [sig, Number(draft[sig])])),
+        start,
+      );
+  }
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        aria-labelledby="scope-dialog-title"
-        className="scope-dialog"
-        role="dialog"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onClose();
-          if (event.key === "Enter") onRun();
+    <Modal title="Model scopes" onClose={onClose}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit(true);
         }}
-        onMouseDown={(event) => event.stopPropagation()}
       >
-        <header>
-          <h2 id="scope-dialog-title">Sig Scopes</h2>
-        </header>
-        <div className="scope-form">
-          {scopeSigs.map((sig, index) => (
+        <div className="modal-body">
+          <p className="help">
+            Choose how many instances of each signature to explore.
+          </p>
+          {scopeSigs.map((sig) => (
             <label className="scope-row" key={sig}>
               <span>{sig}</span>
               <input
+                type="number"
                 min={1}
                 max={20}
-                onChange={(event) => onChange(sig, clampScope(Number(event.target.value)))}
-                ref={index === 0 ? firstInputRef : undefined}
-                type="number"
-                value={scopes[sig] ?? 1}
+                step={1}
+                required
+                value={draft[sig]}
+                onChange={(e) =>
+                  setDraft((current) => ({ ...current, [sig]: e.target.value }))
+                }
               />
             </label>
           ))}
+          {!valid && (
+            <p role="alert" className="validation-error">
+              Enter a whole number from 1 to 20 for each scope.
+            </p>
+          )}
+          {hasRun && (
+            <p className="notice">
+              Applying changed scopes resets the current trace and state tree.
+              Cancel keeps your run.
+            </p>
+          )}
         </div>
-        <footer>
-          <button onClick={onClose} type="button">
+        <footer className="modal-footer">
+          <button type="button" onClick={onClose}>
             Cancel
           </button>
-          <button className="run-action" onClick={onRun} type="button">
-            Run Simulation
+          <button type="button" disabled={!valid} onClick={() => submit(false)}>
+            Apply
+          </button>
+          <button className="primary" type="submit" disabled={!valid}>
+            Apply and start
           </button>
         </footer>
-      </section>
-    </div>
+      </form>
+    </Modal>
   );
 }

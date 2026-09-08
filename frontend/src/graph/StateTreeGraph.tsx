@@ -80,7 +80,7 @@ export function StateTreeGraph({
         },
         {
           selector: "node.unstable",
-          style: { "background-color": "#c62828", "border-color": "#ef5350" }
+          style: { "background-color": "#755021", "border-color": "#f0bf63", shape: "triangle" }
         },
         {
           selector: "node.current",
@@ -100,7 +100,7 @@ export function StateTreeGraph({
             "curve-style": "bezier",
             "target-arrow-shape": "triangle",
             "arrow-scale": 1,
-            "font-size": 9,
+            "font-size": 12,
             color: "#b0bec5",
             "text-background-color": "#0d1520",
             "text-background-opacity": 0.85,
@@ -168,7 +168,7 @@ export function StateTreeGraph({
   }, [currentNodeId, tree]);
 
   if (tree.nodes.length === 0) {
-    return <div className="state-tree-empty">Run Simulate to create the first state.</div>;
+    return <div className="state-tree-empty">Start a simulation to create the first snapshot.</div>;
   }
 
   return (
