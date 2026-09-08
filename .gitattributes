@@ -17,3 +17,6 @@ gradlew text eol=lf
 
 # Committed build output: never rewrite line endings in a generated bundle.
 frontend/dist/** -text
+
+# Keep Vite HTML input stable so generated output is portable.
+frontend/index.html text eol=lf

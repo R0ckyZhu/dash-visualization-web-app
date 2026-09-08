@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { dashApi } from "./api/dashApi";
 import type {
   DashModel,
@@ -8,29 +14,31 @@ import type {
   SessionResponseMeta,
   SimulationMode,
   SolutionResponse,
-  SourceResponse
+  SourceResponse,
 } from "./api/types";
 import {
   AskBar,
   type AskControls,
   type AskResult,
-  type ChatMessage
+  type ChatMessage,
 } from "./components/AskBar";
-import { ConstraintDock } from "./components/ConstraintDock";
+import { Modal } from "./components/Modal";
+import { ModelLibrary } from "./components/ModelLibrary";
+import { ExplorePanel } from "./components/ExplorePanel";
+import { ConfigurationPanel } from "./components/ConfigurationPanel";
 import { EventsVariablesView } from "./components/EventsVariablesView";
-import { SelectionDetails, type DetailSelection } from "./components/SelectionDetails";
+import { type DetailSelection } from "./components/SelectionDetails";
 import { ScopeDialog } from "./components/ScopeDialog";
 import { SplitButton } from "./components/SplitButton";
 import {
   StatechartGraph,
   type StatechartOverlayMode,
-  type StatechartSelection
+  type StatechartSelection,
 } from "./graph/StatechartGraph";
-import { StateTreeGraph } from "./graph/StateTreeGraph";
 import {
   generatedParagraphs,
   parseConstraintDraft,
-  type AppliedConstraint
+  type AppliedConstraint,
 } from "./state/constraints";
 import { expandParameterizedModel } from "./state/modelExpansion";
 import {
@@ -38,14 +46,14 @@ import {
   emptyStateTree,
   extendStateTree,
   reconstructStateTreePath,
-  type StateTree
+  type StateTree,
 } from "./state/stateTree";
 import {
   normalizeTransitionExclusions,
   snapshotKey,
   solutionToTrace,
   takenTuplesFromRawState,
-  type TraceSnapshot
+  type TraceSnapshot,
 } from "./state/trace";
 
 type ViewName = "simulation" | "tables" | "source";
@@ -57,35 +65,33 @@ interface LoadedSession {
   commandCount: number;
 }
 
-function groupExamples(examples: ExampleModel[]) {
-  return examples.reduce<Record<string, ExampleModel[]>>((groups, example) => {
-    groups[example.group] = groups[example.group] ?? [];
-    groups[example.group].push(example);
-    return groups;
-  }, {});
-}
-
 const viewLabels: Record<ViewName, string> = {
   simulation: "Simulation",
   tables: "Events & Variables",
-  source: "Model Source"
+  source: "Model Source",
 };
 
 /** How many solver solutions to walk past before giving up on a new snapshot. */
 const ALT_ENUMERATION_LIMIT = 40;
 
 const simulationModes: Array<{ value: SimulationMode; description: string }> = [
-  { value: "simplified", description: "Prefer successors that can step again; mark dead ends terminal." },
-  { value: "raw", description: "Return any successor the constraints permit." }
+  {
+    value: "simplified",
+    description:
+      "Prefer successors that can step again; mark dead ends terminal.",
+  },
+  { value: "raw", description: "Return any successor the constraints permit." },
 ];
 
-function selectionContext(selection: DetailSelection): Record<string, unknown> | null {
+function selectionContext(
+  selection: DetailSelection,
+): Record<string, unknown> | null {
   if (!selection) return null;
   if (selection.kind === "snapshot") {
     return {
       type: "snapshot",
       id: selection.value.id,
-      label: selection.value.label
+      label: selection.value.label,
     };
   }
   return { type: selection.kind, id: selection.value.id };
@@ -93,19 +99,29 @@ function selectionContext(selection: DetailSelection): Record<string, unknown> |
 
 export function App() {
   const [examples, setExamples] = useState<ExampleModel[]>([]);
-  const [filePath, setFilePath] = useState("");
+  const [openDialog, setOpenDialog] = useState(false);
+  const [support, setSupport] = useState<
+    "explore" | "configure" | "assistant" | null
+  >(null);
+  const [panelWidth, setPanelWidth] = useState(360);
+  const [assistantAvailable, setAssistantAvailable] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const operationLock = useRef(false);
   const [session, setSession] = useState<LoadedSession | null>(null);
   const [trace, setTrace] = useState<TraceSnapshot[]>([]);
   const [traceNodeIds, setTraceNodeIds] = useState<number[]>([]);
   const [stateTree, setStateTree] = useState<StateTree>(() => emptyStateTree());
   const [currentTraceIndex, setCurrentTraceIndex] = useState(0);
-  const [triedTransitionsByStart, setTriedTransitionsByStart] = useState<Record<string, string[]>>({});
+  const [triedTransitionsByStart, setTriedTransitionsByStart] = useState<
+    Record<string, string[]>
+  >({});
   // Successor snapshots already shown from a given origin, so repeated presses of
   // "alternative snapshot" walk forward instead of flipping between the first two.
-  const [shownSnapshotsByStart, setShownSnapshotsByStart] = useState<Record<string, string[]>>({});
+  const [shownSnapshotsByStart, setShownSnapshotsByStart] = useState<
+    Record<string, string[]>
+  >({});
   const [sigScopes, setSigScopes] = useState<Record<string, number>>({});
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
-  const [constraintDockOpen, setConstraintDockOpen] = useState(false);
   // Saved predicates stay in force until disabled; the draft is what is being
   // typed, and the saved set shows as grey placeholder text when the box is empty.
   const [savedConstraints, setSavedConstraints] = useState<string[]>([]);
@@ -119,7 +135,8 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [stateTreeOpen, setStateTreeOpen] = useState(true);
   const [detailSelection, setDetailSelection] = useState<DetailSelection>(null);
-  const [statechartOverlay, setStatechartOverlay] = useState<StatechartOverlayMode>(null);
+  const [statechartOverlay, setStatechartOverlay] =
+    useState<StatechartOverlayMode>(null);
   const [backendSessionId, setBackendSessionId] = useState("default");
   const [sessionRevision, setSessionRevision] = useState(0);
 
@@ -127,49 +144,65 @@ export function App() {
     dashApi
       .examples()
       .then(setExamples)
-      .catch((error) => setStatus(`Could not load examples: ${error.message}`));
-    dashApi.session().then((metadata) => {
-      setBackendSessionId(metadata.sessionId);
-      setSessionRevision(metadata.sessionRevision);
-    }).catch(() => undefined);
+      .catch((error) => {
+        setHasError(true);
+        setStatus(`Could not load examples: ${error.message}`);
+      });
+    dashApi
+      .llmCapabilities()
+      .then((c) => setAssistantAvailable(c.enabled))
+      .catch(() => undefined);
+    dashApi
+      .session()
+      .then((metadata) => {
+        setBackendSessionId(metadata.sessionId);
+        setSessionRevision(metadata.sessionRevision);
+      })
+      .catch(() => undefined);
   }, []);
 
-  const exampleGroups = useMemo(() => groupExamples(examples), [examples]);
   const visualModel = useMemo(
-    () => (session ? expandParameterizedModel(session.model, sigScopes).model : null),
-    [session, sigScopes]
+    () =>
+      session ? expandParameterizedModel(session.model, sigScopes).model : null,
+    [session, sigScopes],
   );
   const currentSnapshot = trace[currentTraceIndex] ?? null;
   const currentTreeNodeId = traceNodeIds[currentTraceIndex] ?? null;
   const activeConstraints = constraintsEnabled ? savedConstraints : [];
   const dockConstraints: AppliedConstraint[] = [
-    ...savedConstraints.map((text): AppliedConstraint => ({ origin: "user", text })),
-    ...generatedParagraphs(generated)
+    ...savedConstraints.map((text): AppliedConstraint => ({
+      origin: "user",
+      text,
+    })),
+    ...generatedParagraphs(generated),
   ];
 
   useEffect(() => {
     if (!session || sessionRevision <= 0) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void dashApi.updateUiContext(
-        backendSessionId,
-        {
-          revision: sessionRevision,
-          stateTree: { nodes: stateTree.nodes, edges: stateTree.edges },
-          traceNodeIds,
-          cursorNodeId: currentTreeNodeId,
-          selection: selectionContext(detailSelection),
-          sigScopes,
-          simulationMode: mode,
-          constraints: constraintsEnabled ? savedConstraints : [],
-          triedTransitionsByStart,
-          shownSnapshotsByStart
-        },
-        controller.signal
-      ).catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        console.warn("Could not synchronize assistant context", error);
-      });
+      void dashApi
+        .updateUiContext(
+          backendSessionId,
+          {
+            revision: sessionRevision,
+            stateTree: { nodes: stateTree.nodes, edges: stateTree.edges },
+            traceNodeIds,
+            cursorNodeId: currentTreeNodeId,
+            selection: selectionContext(detailSelection),
+            sigScopes,
+            simulationMode: mode,
+            constraints: constraintsEnabled ? savedConstraints : [],
+            triedTransitionsByStart,
+            shownSnapshotsByStart,
+          },
+          controller.signal,
+        )
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError")
+            return;
+          console.warn("Could not synchronize assistant context", error);
+        });
     }, 100);
 
     return () => {
@@ -189,16 +222,12 @@ export function App() {
     sigScopes,
     stateTree,
     traceNodeIds,
-    triedTransitionsByStart
+    triedTransitionsByStart,
   ]);
 
   useEffect(() => {
     setDetailSelection(null);
   }, [visualModel]);
-
-  useEffect(() => {
-    if (stateTree.nodes.length > 0) setStateTreeOpen(true);
-  }, [stateTree.nodes.length]);
 
   function defaultScopes(scopeSigs: string[]) {
     return Object.fromEntries(scopeSigs.map((sig) => [sig, 1]));
@@ -209,12 +238,18 @@ export function App() {
     setSessionRevision(response.sessionRevision);
   }
 
-  function updateScope(sig: string, value: number) {
-    const normalized = Math.max(1, Math.floor(value || 1));
-    if (sigScopes[sig] === normalized) return;
-    setSigScopes((current) => ({ ...current, [sig]: normalized }));
-    resetRunState();
-    setStatus("Scopes changed. Run simulation to solve the expanded model.");
+  function applyScopes(nextScopes: Record<string, number>, start: boolean) {
+    if (operationLock.current) return;
+    const changed = Object.keys(nextScopes).some(
+      (sig) => nextScopes[sig] !== sigScopes[sig],
+    );
+    setScopeDialogOpen(false);
+    if (changed) {
+      setSigScopes(nextScopes);
+      if (!start) resetRunState();
+      setStatus("Scopes changed. Start a new simulation.");
+    }
+    if (start) void simulate(nextScopes);
   }
 
   function resetRunState() {
@@ -227,7 +262,10 @@ export function App() {
     setDetailSelection(null);
   }
 
-  function installInitialSolution(solution: SolutionResponse, model: DashModel) {
+  function installInitialSolution(
+    solution: SolutionResponse,
+    model: DashModel,
+  ) {
     const initialTrace = solutionToTrace(solution, model).slice(0, 1);
     if (!solution.satisfiable || initialTrace.length === 0) return false;
     const initialTree = createInitialStateTree(initialTrace[0]);
@@ -250,13 +288,12 @@ export function App() {
   function saveConstraints() {
     const parsed = parseConstraintDraft(constraintDraft);
     setSavedConstraints(parsed);
-    setConstraintDraft("");
     setConstraintsEnabled(true);
-    setConstraintDockOpen(true);
+    setSupport("configure");
     setStatus(
       parsed.length > 0
-        ? `${parsed.length === 1 ? "1 constraint" : `${parsed.length} constraints`} in force until disabled.`
-        : "Constraints cleared."
+        ? `${parsed.length === 1 ? "1 constraint" : `${parsed.length} constraints`} saved for the next solve. Existing snapshots are unchanged.`
+        : "Constraints cleared.",
     );
   }
 
@@ -269,13 +306,17 @@ export function App() {
   function toggleConstraintsEnabled() {
     const next = !constraintsEnabled;
     setConstraintsEnabled(next);
-    setStatus(next ? "Constraints re-enabled." : "Constraints disabled; they stay saved.");
+    setStatus(
+      next
+        ? "Constraints enabled for the next solve."
+        : "Constraints disabled for the next solve; they stay saved.",
+    );
   }
 
   async function askAssistant(
     question: string,
     _history: ChatMessage[],
-    controls: AskControls
+    controls: AskControls,
   ): Promise<AskResult> {
     if (!session) throw new Error("Load a model before asking the assistant.");
 
@@ -291,9 +332,9 @@ export function App() {
         simulationMode: mode,
         constraints: activeConstraints,
         triedTransitionsByStart,
-        shownSnapshotsByStart
+        shownSnapshotsByStart,
       },
-      controls.signal
+      controls.signal,
     );
 
     const completed = await dashApi.streamChat(
@@ -303,18 +344,22 @@ export function App() {
         conversationId: controls.conversationId,
         sessionRevision,
         cursorNodeId: currentTreeNodeId,
-        selection: selectionContext(detailSelection)
+        selection: selectionContext(detailSelection),
       },
       (event) => {
         if (event.type === "message.delta") {
           controls.onDelta(event.delta);
         } else if (event.type === "tool.started") {
-          controls.onToolStatus(`Reading ${event.tool.replaceAll("_", " ")}...`);
+          controls.onToolStatus(
+            `Reading ${event.tool.replaceAll("_", " ")}...`,
+          );
         } else if (event.type === "tool.completed") {
-          controls.onToolStatus(event.succeeded ? "Thinking..." : `${event.tool} failed`);
+          controls.onToolStatus(
+            event.succeeded ? "Thinking..." : `${event.tool} failed`,
+          );
         }
       },
-      controls.signal
+      controls.signal,
     );
     controls.onToolStatus(null);
     return { stale: completed.stale };
@@ -334,41 +379,53 @@ export function App() {
     void refreshGenerated();
   }
 
-  function rememberTriedTransitions(startSnapshot: TraceSnapshot, successors: TraceSnapshot[]) {
-    const tuples = successors.flatMap((snapshot) => takenTuplesFromRawState(snapshot.raw));
+  function rememberTriedTransitions(
+    startSnapshot: TraceSnapshot,
+    successors: TraceSnapshot[],
+  ) {
+    const tuples = successors.flatMap((snapshot) =>
+      takenTuplesFromRawState(snapshot.raw),
+    );
     if (tuples.length === 0) return;
 
     const key = snapshotKey(startSnapshot.raw);
     setTriedTransitionsByStart((previous) => ({
       ...previous,
-      [key]: [...new Set([...(previous[key] ?? []), ...tuples])]
+      [key]: [...new Set([...(previous[key] ?? []), ...tuples])],
     }));
   }
 
   async function runBusy<T>(message: string, action: () => Promise<T>) {
+    if (operationLock.current) return undefined as T;
+    operationLock.current = true;
     setBusy(true);
+    setHasError(false);
     setStatus(message);
     try {
       return await action();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setStatus(message);
+      setHasError(true);
       return undefined as T;
     } finally {
+      operationLock.current = false;
       setBusy(false);
     }
   }
 
-  async function openModel(path = filePath.trim()) {
+  async function openModel(path: string) {
+    if (operationLock.current) return;
     if (!path) {
       setStatus("Enter a .dsh file path or choose a bundled example.");
       return;
     }
 
     setSession(null);
-    setFilePath(path);
+    setOpenDialog(false);
     setScopeDialogOpen(false);
-    setConstraintDockOpen(false);
+    setSupport(window.innerWidth >= 1200 ? "explore" : null);
+    setView("simulation");
     setSource(null);
     resetRunState();
 
@@ -380,46 +437,49 @@ export function App() {
         filePath: path,
         model: inspected.model,
         scopeSigs: inspected.scopeSigs,
-        commandCount: inspected.commandCount
+        commandCount: inspected.commandCount,
       });
       setSigScopes(nextScopes);
       clearConstraints();
       setScopeDialogOpen(inspected.scopeSigs.length > 0);
-      if (inspected.scopeSigs.length > 0) {
-        setStatus("Set scopes before simulation.");
-        return;
-      }
-
-      setStatus("Finding initial state...");
-      const initial = await dashApi.init({ constraints: [], mode, sigScopes: {} });
-      acceptSessionMetadata(initial);
       setStatus(
-        installInitialSolution(initial, inspected.model)
-          ? "Initial state S1 found."
-          : "No initial state found."
+        inspected.scopeSigs.length > 0
+          ? "Review model scopes, then start a simulation."
+          : "Model ready. Start a simulation to find its initial state.",
       );
     });
   }
 
-  async function simulate() {
-    if (!session || !visualModel) return;
+  async function simulate(scopes = sigScopes) {
+    if (!session) return;
+    const solveModel = expandParameterizedModel(session.model, scopes).model;
 
     await runBusy("Finding an initial state...", async () => {
       resetRunState();
       const applied = activeConstraints;
-      const initial = await dashApi.init({ constraints: applied, mode, sigScopes });
+      const initial = await dashApi.init({
+        constraints: applied,
+        mode,
+        sigScopes: scopes,
+      });
       acceptSessionMetadata(initial);
       afterSolve();
       setStatus(
-        installInitialSolution(initial, visualModel)
+        installInitialSolution(initial, solveModel)
           ? "Initial state S1 found."
-          : "No initial state found."
+          : "No initial state found.",
       );
     });
   }
 
   async function step() {
-    if (!session || !visualModel || !currentSnapshot || currentTreeNodeId == null) return;
+    if (
+      !session ||
+      !visualModel ||
+      !currentSnapshot ||
+      currentTreeNodeId == null
+    )
+      return;
     const startIndex = currentTraceIndex;
     const startNodeId = currentTreeNodeId;
 
@@ -429,7 +489,7 @@ export function App() {
         constraints: applied,
         state: currentSnapshot.raw,
         mode,
-        sigScopes
+        sigScopes,
       });
       acceptSessionMetadata(stepped);
       afterSolve();
@@ -440,8 +500,14 @@ export function App() {
       }
 
       const extension = extendStateTree(stateTree, startNodeId, successors);
-      const nextTrace = [...trace.slice(0, startIndex + 1), ...extension.snapshots];
-      const nextNodeIds = [...traceNodeIds.slice(0, startIndex + 1), ...extension.nodeIds];
+      const nextTrace = [
+        ...trace.slice(0, startIndex + 1),
+        ...extension.snapshots,
+      ];
+      const nextNodeIds = [
+        ...traceNodeIds.slice(0, startIndex + 1),
+        ...extension.nodeIds,
+      ];
       rememberTriedTransitions(currentSnapshot, successors);
       setStateTree(extension.tree);
       setTrace(nextTrace);
@@ -461,70 +527,95 @@ export function App() {
     const startIndex = currentTraceIndex - 1;
     const startSnapshot = trace[startIndex];
     const startNodeId = traceNodeIds[startIndex];
-    const currentSuccessors = trace.slice(startIndex + 1, currentTraceIndex + 1);
-    if (!startSnapshot || startNodeId == null || currentSuccessors.length === 0) return;
+    const currentSuccessors = trace.slice(
+      startIndex + 1,
+      currentTraceIndex + 1,
+    );
+    if (!startSnapshot || startNodeId == null || currentSuccessors.length === 0)
+      return;
 
     const originKey = snapshotKey(startSnapshot.raw);
     const alreadyShown = new Set([
       ...(shownSnapshotsByStart[originKey] ?? []),
-      ...currentSuccessors.map((snapshot) => snapshotKey(snapshot.raw))
+      ...currentSuccessors.map((snapshot) => snapshotKey(snapshot.raw)),
     ]);
 
-    await runBusy(`Finding another snapshot from ${startSnapshot.label}...`, async () => {
-      const applied = activeConstraints;
-      let alternate = await dashApi.step({
-        constraints: applied,
-        state: startSnapshot.raw,
-        mode,
-        sigScopes
-      });
-      acceptSessionMetadata(alternate);
-      afterSolve();
-      let successors = solutionToTrace(alternate, visualModel).slice(1);
-
-      // Skip anything already seen from this origin, not just the one on screen.
-      let guard = 0;
-      while (
-        alternate.satisfiable &&
-        successors.length > 0 &&
-        successors.every((snapshot) => alreadyShown.has(snapshotKey(snapshot.raw))) &&
-        guard < ALT_ENUMERATION_LIMIT
-      ) {
-        alternate = await dashApi.nextSolution();
+    await runBusy(
+      `Finding another snapshot from ${startSnapshot.label}...`,
+      async () => {
+        const applied = activeConstraints;
+        let alternate = await dashApi.step({
+          constraints: applied,
+          state: startSnapshot.raw,
+          mode,
+          sigScopes,
+        });
         acceptSessionMetadata(alternate);
-        successors = solutionToTrace(alternate, visualModel).slice(1);
-        guard += 1;
-      }
+        afterSolve();
+        let successors = solutionToTrace(alternate, visualModel).slice(1);
 
-      if (!alternate.satisfiable || successors.length === 0) {
-        setStatus(`No further snapshot was found from ${startSnapshot.label}.`);
-        return;
-      }
-      if (successors.every((snapshot) => alreadyShown.has(snapshotKey(snapshot.raw)))) {
-        setStatus(`No new snapshot found from ${startSnapshot.label} within the search limit.`);
-        return;
-      }
+        // Skip anything already seen from this origin, not just the one on screen.
+        let guard = 0;
+        while (
+          alternate.satisfiable &&
+          successors.length > 0 &&
+          successors.every((snapshot) =>
+            alreadyShown.has(snapshotKey(snapshot.raw)),
+          ) &&
+          guard < ALT_ENUMERATION_LIMIT
+        ) {
+          alternate = await dashApi.nextSolution();
+          acceptSessionMetadata(alternate);
+          successors = solutionToTrace(alternate, visualModel).slice(1);
+          guard += 1;
+        }
 
-      setShownSnapshotsByStart((previous) => ({
-        ...previous,
-        [originKey]: [
-          ...new Set([
-            ...(previous[originKey] ?? []),
-            ...successors.map((snapshot) => snapshotKey(snapshot.raw))
-          ])
-        ]
-      }));
+        if (!alternate.satisfiable || successors.length === 0) {
+          setStatus(
+            `No further snapshot was found from ${startSnapshot.label}.`,
+          );
+          return;
+        }
+        if (
+          successors.every((snapshot) =>
+            alreadyShown.has(snapshotKey(snapshot.raw)),
+          )
+        ) {
+          setStatus(
+            `No new snapshot found from ${startSnapshot.label} within the search limit.`,
+          );
+          return;
+        }
 
-      const extension = extendStateTree(stateTree, startNodeId, successors);
-      const nextTrace = [...trace.slice(0, startIndex + 1), ...extension.snapshots];
-      const nextNodeIds = [...traceNodeIds.slice(0, startIndex + 1), ...extension.nodeIds];
-      rememberTriedTransitions(startSnapshot, successors);
-      setStateTree(extension.tree);
-      setTrace(nextTrace);
-      setTraceNodeIds(nextNodeIds);
-      setCurrentTraceIndex(nextTrace.length - 1);
-      setStatus(`Alternative snapshot: ${nextTrace[nextTrace.length - 1].label}.`);
-    });
+        setShownSnapshotsByStart((previous) => ({
+          ...previous,
+          [originKey]: [
+            ...new Set([
+              ...(previous[originKey] ?? []),
+              ...successors.map((snapshot) => snapshotKey(snapshot.raw)),
+            ]),
+          ],
+        }));
+
+        const extension = extendStateTree(stateTree, startNodeId, successors);
+        const nextTrace = [
+          ...trace.slice(0, startIndex + 1),
+          ...extension.snapshots,
+        ];
+        const nextNodeIds = [
+          ...traceNodeIds.slice(0, startIndex + 1),
+          ...extension.nodeIds,
+        ];
+        rememberTriedTransitions(startSnapshot, successors);
+        setStateTree(extension.tree);
+        setTrace(nextTrace);
+        setTraceNodeIds(nextNodeIds);
+        setCurrentTraceIndex(nextTrace.length - 1);
+        setStatus(
+          `Alternative snapshot: ${nextTrace[nextTrace.length - 1].label}.`,
+        );
+      },
+    );
   }
 
   async function altTrans() {
@@ -534,36 +625,49 @@ export function App() {
     const startNodeId = traceNodeIds[startIndex];
     if (!startSnapshot || startNodeId == null) return;
     const excluded = normalizeTransitionExclusions(
-      triedTransitionsByStart[snapshotKey(startSnapshot.raw)] ?? []
+      triedTransitionsByStart[snapshotKey(startSnapshot.raw)] ?? [],
     );
 
-    await runBusy(`Finding an untaken transition from ${startSnapshot.label}...`, async () => {
-      const applied = activeConstraints;
-      const alternate = await dashApi.altTrans({
-        constraints: applied,
-        state: startSnapshot.raw,
-        mode,
-        sigScopes,
-        excludeTransitions: excluded
-      });
-      acceptSessionMetadata(alternate);
-      afterSolve();
-      const successors = solutionToTrace(alternate, visualModel).slice(1);
-      if (!alternate.satisfiable || successors.length === 0) {
-        setStatus(`No untaken transitions remain from ${startSnapshot.label}.`);
-        return;
-      }
+    await runBusy(
+      `Finding an untaken transition from ${startSnapshot.label}...`,
+      async () => {
+        const applied = activeConstraints;
+        const alternate = await dashApi.altTrans({
+          constraints: applied,
+          state: startSnapshot.raw,
+          mode,
+          sigScopes,
+          excludeTransitions: excluded,
+        });
+        acceptSessionMetadata(alternate);
+        afterSolve();
+        const successors = solutionToTrace(alternate, visualModel).slice(1);
+        if (!alternate.satisfiable || successors.length === 0) {
+          setStatus(
+            `No untaken transitions remain from ${startSnapshot.label}.`,
+          );
+          return;
+        }
 
-      const extension = extendStateTree(stateTree, startNodeId, successors);
-      const nextTrace = [...trace.slice(0, startIndex + 1), ...extension.snapshots];
-      const nextNodeIds = [...traceNodeIds.slice(0, startIndex + 1), ...extension.nodeIds];
-      rememberTriedTransitions(startSnapshot, successors);
-      setStateTree(extension.tree);
-      setTrace(nextTrace);
-      setTraceNodeIds(nextNodeIds);
-      setCurrentTraceIndex(nextTrace.length - 1);
-      setStatus(`Alternative transition selected: ${nextTrace[nextTrace.length - 1].label}.`);
-    });
+        const extension = extendStateTree(stateTree, startNodeId, successors);
+        const nextTrace = [
+          ...trace.slice(0, startIndex + 1),
+          ...extension.snapshots,
+        ];
+        const nextNodeIds = [
+          ...traceNodeIds.slice(0, startIndex + 1),
+          ...extension.nodeIds,
+        ];
+        rememberTriedTransitions(startSnapshot, successors);
+        setStateTree(extension.tree);
+        setTrace(nextTrace);
+        setTraceNodeIds(nextNodeIds);
+        setCurrentTraceIndex(nextTrace.length - 1);
+        setStatus(
+          `Alternative transition selected: ${nextTrace[nextTrace.length - 1].label}.`,
+        );
+      },
+    );
   }
 
   async function altInit() {
@@ -589,12 +693,8 @@ export function App() {
     });
   }
 
-  function runFromScopeDialog() {
-    setScopeDialogOpen(false);
-    void simulate();
-  }
-
   function selectStateTreeNode(nodeId: number) {
+    if (operationLock.current) return;
     const node = stateTree.nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;
     const pathIndex = traceNodeIds.lastIndexOf(nodeId);
@@ -622,462 +722,461 @@ export function App() {
 
   async function chooseView(nextView: ViewName) {
     setView(nextView);
+    if (window.innerWidth < 1000) setSupport(null);
     if (nextView === "source") {
       await loadSource();
     }
   }
 
-  /** Constraints are edited beneath the Alloy source, so the button goes there. */
-  async function openConstraintEditor() {
-    setView("source");
-    setConstraintDockOpen(true);
+  function openConfiguration() {
+    setSupport("configure");
     void refreshGenerated();
-    await loadSource();
   }
 
   return (
     <main className="app-shell">
-      <header className="toolbar">
-        <div className="wordmark">
-          Dash<span>.</span>
+      <header className="app-header">
+        <div className="brand">
+          <span className="brand-symbol" aria-hidden="true">
+            ◇
+          </span>
+          <div className="wordmark">
+            Dash<span> Visualizer</span>
+          </div>
         </div>
+        {session && (
+          <div className="model-identity" title={session.filePath}>
+            <small>MODEL</small>
+            <strong>{session.model.rootName}</strong>
+          </div>
+        )}
         <nav className="tabs" aria-label="Primary views">
           {(["simulation", "tables", "source"] as ViewName[]).map((name) => (
             <button
-              className={view === name ? "active" : ""}
               key={name}
+              disabled={!session || busy}
+              aria-current={view === name ? "page" : undefined}
+              className={view === name ? "active" : ""}
               onClick={() => void chooseView(name)}
-              type="button"
             >
               {viewLabels[name]}
             </button>
           ))}
         </nav>
-        {session ? (
-          <div className="run-summary" title={session.filePath}>
-            <strong>{session.model.rootName}</strong>
-            {Object.entries(sigScopes).length > 0 ? (
-              <span>{Object.entries(sigScopes).map(([sig, scope]) => `${sig}=${scope}`).join(", ")}</span>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="toolbar-spacer" />
-
-        <div className="toolbar-group">
-          <SplitButton
-            actionDisabled={busy}
-            className="open-action"
-            label="Open"
-            menuDisabled={busy}
-            menuLabel="Open a model from a path or the bundled examples"
-            onAction={() => void openModel()}
-          >
-            {(close) => (
-              <>
-                <div className="menu-field">
-                  <label htmlFor="model-path">Model path</label>
-                  <input
-                    autoFocus
-                    id="model-path"
-                    onChange={(event) => setFilePath(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      close();
-                      void openModel();
-                    }}
-                    placeholder="Path to .dsh model"
-                    value={filePath}
-                  />
-                </div>
-                <div className="menu-scroll">
-                  {Object.entries(exampleGroups).map(([group, items]) => (
-                    <section className="menu-section" key={group}>
-                      <h4>{group}</h4>
-                      {items.map((example) => (
-                        <button
-                          className="menu-item"
-                          key={example.path}
-                          onClick={() => {
-                            close();
-                            void openModel(example.path);
-                          }}
-                          role="menuitem"
-                          type="button"
-                        >
-                          {example.name}
-                        </button>
-                      ))}
-                    </section>
-                  ))}
-                </div>
-              </>
-            )}
-          </SplitButton>
-
-          <SplitButton
-            actionDisabled={!session || busy}
-            className="run-action"
-            label="Simulate"
-            menuDisabled={busy}
-            menuLabel="Choose the simulation mode"
-            onAction={() => void simulate()}
-          >
-            {(close) => (
-              <section className="menu-section">
-                <h4>Simulation mode</h4>
-                {simulationModes.map((option) => (
-                  <button
-                    className={`menu-item menu-choice${mode === option.value ? " selected" : ""}`}
-                    key={option.value}
-                    onClick={() => {
-                      setMode(option.value);
-                      close();
-                    }}
-                    role="menuitemradio"
-                    aria-checked={mode === option.value}
-                    type="button"
-                  >
-                    <span className="menu-check" aria-hidden="true">{mode === option.value ? "✓" : ""}</span>
-                    <span>
-                      <strong>{option.value}</strong>
-                      <small>{option.description}</small>
-                    </span>
-                  </button>
-                ))}
-              </section>
-            )}
-          </SplitButton>
-        </div>
-
-        <div className="toolbar-group">
-          <button disabled={!session?.scopeSigs.length || busy} onClick={() => setScopeDialogOpen(true)} type="button">
-            Scopes
-          </button>
-          <button disabled={!session || busy} onClick={() => void openConstraintEditor()} type="button">
-            Constraints{savedConstraints.length > 0 ? ` (${savedConstraints.length})` : ""}
+        <div className="header-actions">
+          <button disabled={busy} onClick={() => setOpenDialog(true)}>
+            Open model
           </button>
           <button
-            className={constraintsEnabled ? "" : "toggle-off"}
-            disabled={savedConstraints.length === 0 || busy}
-            onClick={toggleConstraintsEnabled}
-            title={
-              constraintsEnabled
-                ? "Stop applying the saved constraints, without losing them"
-                : "Apply the saved constraints again"
+            disabled={!session}
+            aria-expanded={support === "assistant"}
+            onClick={() =>
+              setSupport(support === "assistant" ? null : "assistant")
             }
-            type="button"
           >
-            {constraintsEnabled ? "Disable" : "Enable"}
+            ✳ Assistant
           </button>
-        </div>
-
-        <div className="toolbar-group step-group">
-          <button disabled={!currentSnapshot || busy} onClick={() => void step()} type="button">
-            Step
-          </button>
-          <button disabled={trace.length === 0 || busy} onClick={() => void altInit()} type="button">
-            Alt Init
-          </button>
-          <SplitButton
-            actionDisabled={currentTraceIndex <= 0 || busy}
-            label="Alt"
-            menuDisabled={currentTraceIndex <= 0 || busy}
-            menuLabel="Choose what to vary"
-            onAction={() => void altTrans()}
-          >
-            {(close) => (
-              <section className="menu-section">
-                <h4>Alternative from the previous snapshot</h4>
-                <button
-                  className="menu-item menu-choice"
-                  onClick={() => {
-                    close();
-                    void altTrans();
-                  }}
-                  role="menuitem"
-                  type="button"
-                >
-                  <span className="menu-check" aria-hidden="true">·</span>
-                  <span>
-                    <strong>Transition</strong>
-                    <small>Fire a transition not already taken from here. The default.</small>
-                  </span>
-                </button>
-                <button
-                  className="menu-item menu-choice"
-                  onClick={() => {
-                    close();
-                    void altSnapshot();
-                  }}
-                  role="menuitem"
-                  type="button"
-                >
-                  <span className="menu-check" aria-hidden="true">·</span>
-                  <span>
-                    <strong>Snapshot</strong>
-                    <small>Any successor that differs in states, transitions, events or variables.</small>
-                  </span>
-                </button>
-              </section>
-            )}
-          </SplitButton>
         </div>
       </header>
-
-      <section className="status-bar">{busy ? "Working..." : status}</section>
-
+      {session && (
+        <div className="command-bar" aria-label="Simulation commands">
+          <div className="command-group">
+            <button
+              className={currentSnapshot ? "secondary" : "primary"}
+              disabled={busy}
+              onClick={() => void simulate()}
+            >
+              {currentSnapshot ? "Restart simulation" : "Start simulation"}
+            </button>
+            <button
+              className={currentSnapshot ? "primary" : "secondary"}
+              disabled={!currentSnapshot || busy || !!currentSnapshot.terminal}
+              title={
+                currentSnapshot?.terminal
+                  ? "This snapshot is terminal"
+                  : "Advance from the selected snapshot"
+              }
+              onClick={() => void step()}
+            >
+              Step →
+            </button>
+            <SplitButton
+              menuOnly
+              label="Alternatives"
+              actionDisabled={busy || !currentSnapshot}
+              menuDisabled={busy || !currentSnapshot}
+              menuLabel="Explore alternative states"
+              onAction={() => void altInit()}
+            >
+              {(close) => (
+                <>
+                  <p className="help">
+                    {currentTraceIndex > 0
+                      ? `Explore another successor of ${trace[currentTraceIndex - 1]?.label}`
+                      : "At the initial snapshot"}
+                  </p>
+                  <button
+                    className="menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      close();
+                      void altInit();
+                    }}
+                  >
+                    Alternative initial state
+                  </button>
+                  <button
+                    className="menu-item"
+                    role="menuitem"
+                    disabled={currentTraceIndex <= 0}
+                    onClick={() => {
+                      close();
+                      void altTrans();
+                    }}
+                  >
+                    Alternative transition
+                  </button>
+                  <button
+                    className="menu-item"
+                    role="menuitem"
+                    disabled={currentTraceIndex <= 0}
+                    onClick={() => {
+                      close();
+                      void altSnapshot();
+                    }}
+                  >
+                    Alternative snapshot
+                  </button>
+                </>
+              )}
+            </SplitButton>
+          </div>
+          <label className="mode-control">
+            Mode{" "}
+            <select
+              disabled={busy}
+              value={mode}
+              onChange={(e) => setMode(e.target.value as SimulationMode)}
+            >
+              {simulationModes.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.value === "raw" ? "Raw" : "Simplified"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="snapshot-badge">
+            {currentSnapshot
+              ? `${currentSnapshot.label}${currentSnapshot.terminal ? " · Terminal" : currentSnapshot.stable === false ? " · Unstable" : currentSnapshot.stable === true ? " · Stable" : " · Stability unknown"}`
+              : "No simulation yet"}
+          </span>
+          <div className="command-end">
+            <button
+              aria-expanded={support === "configure"}
+              onClick={openConfiguration}
+            >
+              Configure
+              {savedConstraints.length ? ` · ${savedConstraints.length}` : ""}
+            </button>
+            <button
+              aria-expanded={support === "explore"}
+              onClick={() =>
+                setSupport(support === "explore" ? null : "explore")
+              }
+            >
+              Inspect
+            </button>
+          </div>
+        </div>
+      )}
       {!session ? (
-        <OpenModelPanel exampleGroups={exampleGroups} onSelect={(path) => void openModel(path)} />
+        <section className="welcome">
+          <div className="welcome-intro">
+            <p className="eyebrow">DASH MODEL WORKSPACE</p>
+            <h1>
+              Explore how your
+              <br />
+              system behaves.
+            </h1>
+            <p>
+              Open a statechart, follow its transitions, and understand
+              <br className="desktop-break" /> what changes at every step.
+            </p>
+            <div className="workflow-hint">
+              <span>
+                01 <b>Open a model</b>
+              </span>
+              <span>
+                02 <b>Start a simulation</b>
+              </span>
+              <span>
+                03 <b>Explore states</b>
+              </span>
+            </div>
+          </div>
+          <ModelLibrary
+            examples={examples}
+            busy={busy}
+            onOpen={(path) => void openModel(path)}
+          />
+        </section>
       ) : (
-        <section className="workspace">
-          {view === "simulation" && (
-            <SimulationView
-              currentTraceIndex={currentTraceIndex}
-              currentTreeNodeId={currentTreeNodeId}
-              detailSelection={detailSelection}
-              model={visualModel ?? session.model}
-              onDetailSelectionChange={setDetailSelection}
-              onSelectStateTreeNode={selectStateTreeNode}
-              onStateTreeOpenChange={setStateTreeOpen}
-              onStatechartOverlayChange={setStatechartOverlay}
-              stateTree={stateTree}
-              stateTreeOpen={stateTreeOpen}
-              statechartOverlay={statechartOverlay}
-              trace={trace}
-            />
-          )}
-          {view === "tables" && (
-            <EventsVariablesView
-              currentTraceIndex={currentTraceIndex}
-              onSelectTrace={setCurrentTraceIndex}
-              trace={trace}
-            />
-          )}
-          {view === "source" && (
-            <SourceView
-              constraintCount={dockConstraints.length}
-              draft={constraintDraft}
-              onDraftChange={setConstraintDraft}
-              onReuse={reuseConstraints}
-              onSave={saveConstraints}
-              onToggleDock={() => {
-                setConstraintDockOpen((open) => !open);
-                void refreshGenerated();
+        <section
+          className={`workspace ${support ? "support-open" : ""}`}
+          style={{ "--support-width": `${panelWidth}px` } as CSSProperties}
+        >
+          <div className="main-content">
+            {view === "simulation" && (
+              <section className="graph-panel">
+                <div className="panel-header">
+                  <div>
+                    <p className="eyebrow">SIMULATION</p>
+                    <h2>Statechart</h2>
+                  </div>
+                  <span>
+                    {(visualModel ?? session.model).states.length} states ·{" "}
+                    {(visualModel ?? session.model).transitions.length}{" "}
+                    transitions
+                  </span>
+                </div>
+                <StatechartGraph
+                  model={visualModel ?? session.model}
+                  activeStateIds={currentSnapshot?.activeStates ?? []}
+                  currentSnapshotRaw={currentSnapshot?.raw ?? null}
+                  hasSnapshot={!!currentSnapshot}
+                  onOverlayModeChange={setStatechartOverlay}
+                  overlayMode={statechartOverlay}
+                  onSelectionChange={setDetailSelection}
+                  selection={
+                    detailSelection?.kind === "state" ||
+                    detailSelection?.kind === "transition"
+                      ? detailSelection
+                      : null
+                  }
+                  takenTransitionIds={currentSnapshot?.takenTransitions ?? []}
+                />
+                <div className="graph-legend">
+                  <span>
+                    <i className="legend-active" /> Active
+                  </span>
+                  <span>
+                    <i className="legend-selected" /> Selected
+                  </span>
+                  <span>
+                    <i className="legend-default" /> Default
+                  </span>
+                  <span>Drag to pan · Scroll to zoom</span>
+                </div>
+              </section>
+            )}
+            {view === "tables" && (
+              <EventsVariablesView
+                currentTraceIndex={currentTraceIndex}
+                onSelectTrace={(index) => {
+                  const id = traceNodeIds[index];
+                  if (id == null) return;
+                  selectStateTreeNode(id);
+                  const node = stateTree.nodes.find((n) => n.id === id);
+                  if (node)
+                    setDetailSelection({ kind: "snapshot", value: node });
+                }}
+                trace={trace}
+              />
+            )}
+            {view === "source" && (
+              <SourceView source={source} onConfigure={openConfiguration} />
+            )}
+          </div>
+          {support && (
+            <div
+              className="panel-resizer"
+              role="separator"
+              aria-label="Resize support panel"
+              aria-orientation="vertical"
+              aria-valuemin={300}
+              aria-valuemax={440}
+              aria-valuenow={panelWidth}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                  e.preventDefault();
+                  setPanelWidth((w) =>
+                    Math.max(
+                      300,
+                      Math.min(440, w + (e.key === "ArrowLeft" ? 20 : -20)),
+                    ),
+                  );
+                }
               }}
-              savedConstraints={savedConstraints}
-              source={source}
+              onPointerDown={(e) =>
+                e.currentTarget.setPointerCapture(e.pointerId)
+              }
+              onPointerMove={(e) => {
+                if (e.currentTarget.hasPointerCapture(e.pointerId))
+                  setPanelWidth(
+                    Math.max(
+                      300,
+                      Math.min(
+                        440,
+                        e.currentTarget.parentElement!.getBoundingClientRect()
+                          .right - e.clientX,
+                      ),
+                    ),
+                  );
+              }}
+              onPointerUp={(e) =>
+                e.currentTarget.releasePointerCapture(e.pointerId)
+              }
             />
           )}
+          <aside
+            className="support-panel"
+            hidden={!support}
+            aria-label="Model tools"
+          >
+            <div className="support-tabs">
+              <nav aria-label="Model tools">
+                {(["explore", "configure", "assistant"] as const).map(
+                  (name) => (
+                    <button
+                      key={name}
+                      aria-pressed={support === name}
+                      className={support === name ? "active" : ""}
+                      onClick={() => setSupport(name)}
+                    >
+                      {name === "explore"
+                        ? "Explore"
+                        : name === "configure"
+                          ? "Configure"
+                          : "Assistant"}
+                    </button>
+                  ),
+                )}
+              </nav>
+              <button
+                aria-label="Close support panel"
+                className="quiet"
+                onClick={() => setSupport(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div hidden={support !== "explore"}>
+              <ExplorePanel
+                model={visualModel ?? session.model}
+                tree={stateTree}
+                cursor={currentTreeNodeId}
+                selection={detailSelection}
+                onSelection={setDetailSelection}
+                onSelectNode={selectStateTreeNode}
+                treeOpen={stateTreeOpen}
+                onTreeOpen={setStateTreeOpen}
+              />
+            </div>
+            <div hidden={support !== "configure"}>
+              <ConfigurationPanel
+                draft={constraintDraft}
+                onDraft={setConstraintDraft}
+                onSave={saveConstraints}
+                saved={savedConstraints}
+                enabled={constraintsEnabled}
+                onToggle={toggleConstraintsEnabled}
+                generated={dockConstraints.filter((c) => c.origin === "app")}
+                scopes={sigScopes}
+                onScopes={() => setScopeDialogOpen(true)}
+                busy={busy}
+              />
+            </div>
+            <div
+              hidden={support !== "assistant"}
+              className="assistant-container"
+            >
+              <AskBar
+                onAsk={askAssistant}
+                enabled={assistantAvailable}
+                context={
+                  currentSnapshot
+                    ? `${session.model.rootName} · ${currentSnapshot.label}`
+                    : session.model.rootName
+                }
+              />
+            </div>
+          </aside>
         </section>
       )}
-      {session?.scopeSigs.length ? (
+      <footer
+        className={`status-bar ${hasError ? "status-error" : ""}`}
+        role="status"
+        aria-live="polite"
+      >
+        <span className={`status-dot ${busy ? "pending" : ""}`} />
+        {status}
+        {busy && <span className="status-operation">In progress</span>}
+      </footer>
+      {openDialog && (
+        <Modal title="Open a model" onClose={() => setOpenDialog(false)}>
+          <ModelLibrary
+            examples={examples}
+            busy={busy}
+            onOpen={(path) => void openModel(path)}
+          />
+        </Modal>
+      )}
+      {session && scopeDialogOpen && (
         <ScopeDialog
-          onChange={updateScope}
-          onClose={() => setScopeDialogOpen(false)}
-          onRun={runFromScopeDialog}
-          open={scopeDialogOpen}
-          scopeSigs={session.scopeSigs}
           scopes={sigScopes}
+          scopeSigs={session.scopeSigs}
+          hasRun={trace.length > 0}
+          onClose={() => setScopeDialogOpen(false)}
+          onApply={applyScopes}
         />
-      ) : null}
-      <AskBar onAsk={askAssistant} />
-
-      {session && constraintDockOpen ? (
-        <ConstraintDock
-          constraints={dockConstraints}
-          enabled={constraintsEnabled}
-          onClose={() => setConstraintDockOpen(false)}
-        />
-      ) : null}
+      )}
     </main>
   );
 }
 
-function OpenModelPanel({
-  exampleGroups,
-  onSelect
-}: {
-  exampleGroups: Record<string, ExampleModel[]>;
-  onSelect: (path: string) => void;
-}) {
-  return (
-    <section className="empty-state">
-      <h1>Open a Dash model</h1>
-      <div className="example-grid">
-        {Object.entries(exampleGroups).map(([group, items]) => (
-          <section className="example-group" key={group}>
-            <h2>{group}</h2>
-            {items.map((example) => (
-              <button key={example.path} onClick={() => onSelect(example.path)} type="button">
-                {example.name}
-              </button>
-            ))}
-          </section>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function SimulationView({
-  model,
-  trace,
-  currentTraceIndex,
-  currentTreeNodeId,
-  detailSelection,
-  stateTree,
-  stateTreeOpen,
-  statechartOverlay,
-  onDetailSelectionChange,
-  onSelectStateTreeNode,
-  onStateTreeOpenChange,
-  onStatechartOverlayChange
-}: {
-  model: DashModel;
-  trace: TraceSnapshot[];
-  currentTraceIndex: number;
-  currentTreeNodeId: number | null;
-  detailSelection: DetailSelection;
-  stateTree: StateTree;
-  stateTreeOpen: boolean;
-  statechartOverlay: StatechartOverlayMode;
-  onDetailSelectionChange: (selection: DetailSelection) => void;
-  onSelectStateTreeNode: (nodeId: number) => void;
-  onStateTreeOpenChange: (open: boolean) => void;
-  onStatechartOverlayChange: (mode: StatechartOverlayMode) => void;
-}) {
-  const currentSnapshot = trace[currentTraceIndex] ?? null;
-
-  const statechartSelection: StatechartSelection | null =
-    detailSelection?.kind === "state" || detailSelection?.kind === "transition"
-      ? detailSelection
-      : null;
-
-  function selectSnapshot(nodeId: number) {
-    onSelectStateTreeNode(nodeId);
-    const node = stateTree.nodes.find((candidate) => candidate.id === nodeId);
-    if (node) onDetailSelectionChange({ kind: "snapshot", value: node });
-  }
-
-  function selectTreeTransition(transitionId: string) {
-    const transition = model.transitions.find(
-      (candidate) => candidate.id === transitionId || candidate._originalId === transitionId
-    );
-    onDetailSelectionChange({ kind: "transition", value: transition ?? { id: transitionId } });
-  }
-
-  return (
-    <section className={`view-panel simulation-layout${stateTreeOpen ? "" : " state-tree-closed"}`}>
-      <div className="graph-panel">
-        <div className="panel-header">
-          <h2>Statechart</h2>
-          <div className="panel-meta">
-            <span>{model.states.length} states / {model.transitions.length} transitions</span>
-            {!stateTreeOpen ? <button onClick={() => onStateTreeOpenChange(true)} type="button">State Tree</button> : null}
-          </div>
-        </div>
-        <StatechartGraph
-          activeStateIds={currentSnapshot?.activeStates ?? []}
-          currentSnapshotRaw={currentSnapshot?.raw ?? null}
-          hasSnapshot={currentSnapshot != null}
-          model={model}
-          onOverlayModeChange={onStatechartOverlayChange}
-          onSelectionChange={onDetailSelectionChange}
-          overlayMode={statechartOverlay}
-          selection={statechartSelection}
-          takenTransitionIds={currentSnapshot?.takenTransitions ?? []}
-        />
-      </div>
-      {stateTreeOpen ? <div className="trace-panel">
-        <div className="panel-header">
-          <h2>State Tree</h2>
-          <div className="panel-meta">
-            <span>{stateTree.nodes.length > 0 ? `${stateTree.nodes.length} unique states` : "idle"}</span>
-            <button aria-label="Close state tree" className="panel-close" onClick={() => onStateTreeOpenChange(false)} type="button">×</button>
-          </div>
-        </div>
-        <StateTreeGraph
-          currentNodeId={currentTreeNodeId}
-          onSelectNode={selectSnapshot}
-          onSelectTransition={selectTreeTransition}
-          tree={stateTree}
-        />
-        <SelectionDetails onClose={() => onDetailSelectionChange(null)} selection={detailSelection} />
-      </div> : null}
-    </section>
-  );
-}
-
 function SourceView({
-  constraintCount,
-  draft,
-  onDraftChange,
-  onReuse,
-  onSave,
-  onToggleDock,
-  savedConstraints,
-  source
+  source,
+  onConfigure,
 }: {
-  constraintCount: number;
-  draft: string;
-  onDraftChange: (value: string) => void;
-  onReuse: () => void;
-  onSave: () => void;
-  onToggleDock: () => void;
-  savedConstraints: string[];
   source: SourceResponse | null;
+  onConfigure: () => void;
 }) {
-  if (!source) {
-    return <section className="view-panel muted">No source loaded.</section>;
-  }
-
-  const canReuse = draft.trim().length === 0 && savedConstraints.length > 0;
-
+  const [tab, setTab] = useState<"dsh" | "als">("dsh");
+  if (!source)
+    return (
+      <p className="muted">No source loaded. Return to this view to retry.</p>
+    );
   return (
-    <section className="source-view">
-      <article>
-        <header><strong>.dsh</strong><span>{source.file.split(/[\\/]/).pop()}</span></header>
-        <pre>{source.dsh}</pre>
-      </article>
-      <article className="als-article">
-        <header>
-          <strong>.als</strong>
-          <span>translated Alloy</span>
-          <button className="header-action" onClick={onToggleDock} type="button">
-            Constraints{constraintCount > 0 ? ` (${constraintCount})` : ""}
+    <div className="source-shell">
+      <div className="source-tools">
+        <span>Read-only model source</span>
+        <div className="source-switch">
+          <button aria-pressed={tab === "dsh"} onClick={() => setTab("dsh")}>
+            Dash
           </button>
-        </header>
-        <pre>{source.als}</pre>
-        <div className="constraint-editor">
-          <label htmlFor="constraint-draft">
-            Additional constraints
-            <small>one Alloy predicate per line, applied to the next solve</small>
-          </label>
-          <textarea
-            id="constraint-draft"
-            onChange={(event) => onDraftChange(event.target.value)}
-            placeholder={
-              savedConstraints.length > 0
-                ? savedConstraints.join("\n")
-                : "e.g. TrafficLight_EastWest_Green in __webapp_conf[s]"
-            }
-            rows={4}
-            spellCheck={false}
-            value={draft}
-          />
-          <div className="constraint-editor-actions">
-            {canReuse ? (
-              <button onClick={onReuse} type="button">
-                Reuse last
-              </button>
-            ) : null}
-            <button className="run-action" onClick={onSave} type="button">
-              Save
-            </button>
-          </div>
+          <button aria-pressed={tab === "als"} onClick={() => setTab("als")}>
+            Alloy
+          </button>
         </div>
-      </article>
-    </section>
+        <button onClick={onConfigure}>Edit constraints</button>
+      </div>
+      <section className={`source-view source-${tab}`}>
+        <article className="dash-source">
+          <header>
+            <strong>Dash · .dsh</strong>
+            <span>{source.file.split(/[\\/]/).pop()}</span>
+          </header>
+          <pre>{source.dsh}</pre>
+        </article>
+        <article className="alloy-source">
+          <header>
+            <strong>Alloy · .als</strong>
+            <span>Translated source</span>
+          </header>
+          <pre>{source.als}</pre>
+        </article>
+      </section>
+    </div>
   );
 }

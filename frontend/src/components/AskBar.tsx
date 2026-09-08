@@ -17,22 +17,22 @@ export interface AskResult {
   stale: boolean;
 }
 
-type Phase = "collapsed" | "composing" | "expanded";
-
 /**
- * Floating ask bar, bottom centre of the app. Starts as a translucent pill, opens
- * for typing on click, and grows into a conversation panel once something is sent.
+ * Docked assistant. Keep mounted across panel switches to retain the conversation.
  */
 export function AskBar({
-  onAsk
+  onAsk,
+  enabled,
+  context,
 }: {
+  enabled: boolean;
+  context: string;
   onAsk: (
     question: string,
     history: ChatMessage[],
-    controls: AskControls
+    controls: AskControls,
   ) => Promise<AskResult>;
 }) {
-  const [phase, setPhase] = useState<Phase>("collapsed");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [waiting, setWaiting] = useState(false);
@@ -44,33 +44,27 @@ export function AskBar({
   const conversationIdRef = useRef(`conversation-${crypto.randomUUID()}`);
 
   useEffect(() => {
-    if (phase !== "collapsed") inputRef.current?.focus();
-  }, [phase]);
-
-  useEffect(() => {
     const transcript = transcriptRef.current;
     if (transcript) transcript.scrollTop = transcript.scrollHeight;
   }, [messages, waiting]);
 
-  function collapse() {
-    // Keep the conversation; just fold the panel away.
-    setPhase("collapsed");
-  }
-
   async function send() {
     const question = draft.trim();
-    if (!question || waiting) return;
+    if (!enabled || !question || waiting) return;
 
-    const asked: ChatMessage = { id: `q${Date.now()}`, role: "user", text: question };
+    const asked: ChatMessage = {
+      id: `q${Date.now()}`,
+      role: "user",
+      text: question,
+    };
     const answerId = `a${Date.now()}`;
     const nextHistory = [...messages, asked];
     setMessages((current) => [
       ...current,
       asked,
-      { id: answerId, role: "assistant", text: "" }
+      { id: answerId, role: "assistant", text: "" },
     ]);
     setDraft("");
-    setPhase("expanded");
     setWaiting(true);
     setStale(false);
     setActivity("Thinking...");
@@ -81,33 +75,44 @@ export function AskBar({
       const result = await onAsk(question, nextHistory, {
         conversationId: conversationIdRef.current,
         onDelta: (delta) => {
-          setMessages((current) => current.map((message) =>
-            message.id === answerId ? { ...message, text: message.text + delta } : message
-          ));
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === answerId
+                ? { ...message, text: message.text + delta }
+                : message,
+            ),
+          );
         },
         onToolStatus: setActivity,
-        signal: controller.signal
+        signal: controller.signal,
       });
       setStale(result.stale);
     } catch (error) {
-      const stopped = error instanceof DOMException && error.name === "AbortError";
+      const stopped =
+        error instanceof DOMException && error.name === "AbortError";
       const failure = stopped
         ? "Stopped."
-        : error instanceof Error ? error.message : String(error);
-      setMessages((current) => current.map((message) =>
-        message.id === answerId
-          ? {
-              ...message,
-              text: message.text ? `${message.text}\n\n${failure}` : failure
-            }
-          : message
-      ));
+        : error instanceof Error
+          ? error.message
+          : String(error);
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === answerId
+            ? {
+                ...message,
+                text: message.text ? `${message.text}\n\n${failure}` : failure,
+              }
+            : message,
+        ),
+      );
     } finally {
       setWaiting(false);
       setActivity(null);
       abortRef.current = null;
     }
   }
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   function clearConversation() {
     abortRef.current?.abort();
@@ -118,86 +123,105 @@ export function AskBar({
   }
 
   return (
-    <div className={`ask-bar ask-${phase}`}>
-      {phase === "expanded" ? (
-        <section className="ask-panel" aria-label="Conversation">
-          <header>
-            <h3>Ask</h3>
-            <div>
-              <button onClick={clearConversation} type="button">
-                Clear
-              </button>
-              <button
-                aria-label="Close conversation"
-                className="ask-close"
-                onClick={collapse}
-                type="button"
-              >
-                ×
-              </button>
-            </div>
-          </header>
-          <div className="ask-transcript" ref={transcriptRef}>
-            {messages.map((message) => (
-              <article className={`ask-message ask-${message.role}`} key={message.id}>
-                {message.text || (waiting ? "Thinking..." : "No response text.")}
-              </article>
-            ))}
-            {activity && activity !== "Thinking..." ? (
-              <div className="ask-activity">{activity}</div>
-            ) : null}
-            {stale ? <div className="ask-stale">Based on an earlier simulation state.</div> : null}
-          </div>
-        </section>
-      ) : null}
-
-      {phase === "collapsed" ? (
-        <button
-          className="ask-pill"
-          onClick={() => setPhase(messages.length > 0 ? "expanded" : "composing")}
-          type="button"
-        >
-          <span className="ask-glyph" aria-hidden="true">✳</span>
-          <span className="ask-placeholder">Ask anything</span>
-        </button>
-      ) : (
-        <form
-          className="ask-pill ask-pill-active"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void send();
-          }}
-        >
-          <span className="ask-glyph" aria-hidden="true">✳</span>
-          <input
-            aria-label="Ask anything"
-            onBlur={() => {
-              if (!draft.trim() && messages.length === 0) setPhase("collapsed");
-            }}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") collapse();
-            }}
-            placeholder="Ask anything"
-            ref={inputRef}
-            value={draft}
-          />
-          {waiting ? (
-            <button
-              aria-label="Stop"
-              className="ask-send ask-stop"
-              onClick={() => abortRef.current?.abort()}
-              type="button"
-            >
-              ■
-            </button>
-          ) : (
-            <button aria-label="Send" className="ask-send" disabled={!draft.trim()} type="submit">
-              ↑
-            </button>
-          )}
-        </form>
+    <div className="ask-bar ask-expanded">
+      <p className="assistant-context">{context}</p>
+      {!enabled && (
+        <p className="notice">
+          Assistant unavailable. Configure the local assistant service to ask
+          about this model.
+        </p>
       )}
+      {messages.length === 0 && enabled && (
+        <div className="assistant-welcome">
+          <span aria-hidden="true">✳</span>
+          <h2>Understand this model</h2>
+          <p>
+            Ask about a state, a transition, or what changed in this snapshot.
+          </p>
+          <button
+            onClick={() => {
+              setDraft("Explain the selected state or transition.");
+              inputRef.current?.focus();
+            }}
+          >
+            Explain my selection
+          </button>
+          <button
+            onClick={() => {
+              setDraft("Summarize the current snapshot.");
+              inputRef.current?.focus();
+            }}
+          >
+            Summarize this snapshot
+          </button>
+        </div>
+      )}
+      <section className="ask-panel" aria-label="Conversation">
+        <header>
+          <h3>Conversation</h3>
+          <button
+            disabled={waiting || !messages.length}
+            onClick={clearConversation}
+          >
+            Clear
+          </button>
+        </header>
+        <div className="ask-transcript" ref={transcriptRef}>
+          {messages.map((message) => (
+            <article
+              className={`ask-message ask-${message.role}`}
+              key={message.id}
+            >
+              {message.text || (waiting ? "Thinking…" : "No response text.")}
+            </article>
+          ))}
+          {activity && (
+            <div className="ask-activity" role="status">
+              {activity}
+            </div>
+          )}
+          {stale && (
+            <div className="ask-stale">
+              Based on an earlier simulation state.
+            </div>
+          )}
+        </div>
+      </section>
+      <form
+        className="ask-pill ask-pill-active"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void send();
+        }}
+      >
+        <input
+          aria-label="Ask about this model"
+          disabled={!enabled}
+          placeholder="Ask about this model…"
+          value={draft}
+          ref={inputRef}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        {waiting ? (
+          <button
+            type="button"
+            aria-label="Stop"
+            className="ask-send ask-stop"
+            onClick={() => abortRef.current?.abort()}
+          >
+            ■
+          </button>
+        ) : (
+          <button
+            type="submit"
+            aria-label="Send"
+            className="ask-send"
+            disabled={!enabled || !draft.trim()}
+          >
+            ↑
+          </button>
+        )}
+      </form>
     </div>
   );
 }

@@ -52,3 +52,9 @@ backend/repro_*.py
 
 # Claude
 .claude/
+
+# Isolated validation cache
+.gradle-local/
+
+# Local validation outputs; reusable tests live in frontend/tests and scripts.
+/reports/
