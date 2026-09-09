@@ -58,3 +58,6 @@ backend/repro_*.py
 
 # Local validation outputs; reusable tests live in frontend/tests and scripts.
 /reports/
+
+# Local working notes; never commit this directory.
+/docs/

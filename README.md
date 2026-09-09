@@ -171,6 +171,5 @@ The **Mode** selector supports two modes:
 - `raw` returns any snapshot allowed by the active model and constraints.
 
 Unexpected Counter behavior has been reported and is awaiting a reproducible
-walkthrough. See the [Counter investigation notes](docs/counter-investigation.md)
-for the information to capture. The existing smoke tests do not establish that
-every model, translation, or displayed trace is semantically correct.
+walkthrough. The existing smoke tests do not establish that every model,
+translation, or displayed trace is semantically correct.
