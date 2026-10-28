@@ -99,6 +99,7 @@ function selectionContext(
 
 export function App() {
   const [examples, setExamples] = useState<ExampleModel[]>([]);
+  const [allowLocalModelPaths, setAllowLocalModelPaths] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [support, setSupport] = useState<
     "explore" | "configure" | "assistant" | null
@@ -143,7 +144,10 @@ export function App() {
   useEffect(() => {
     dashApi
       .examples()
-      .then(setExamples)
+      .then((catalog) => {
+        setExamples(catalog.examples);
+        setAllowLocalModelPaths(catalog.allowLocalModelPaths);
+      })
       .catch((error) => {
         setHasError(true);
         setStatus(`Could not load examples: ${error.message}`);
@@ -916,6 +920,7 @@ export function App() {
           </div>
           <ModelLibrary
             examples={examples}
+            allowLocalModelPaths={allowLocalModelPaths}
             busy={busy}
             onOpen={(path) => void openModel(path)}
           />
@@ -1117,6 +1122,7 @@ export function App() {
         <Modal title="Open a model" onClose={() => setOpenDialog(false)}>
           <ModelLibrary
             examples={examples}
+            allowLocalModelPaths={allowLocalModelPaths}
             busy={busy}
             onOpen={(path) => void openModel(path)}
           />

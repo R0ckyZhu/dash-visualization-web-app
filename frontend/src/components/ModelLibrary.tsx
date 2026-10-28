@@ -2,10 +2,12 @@ import { useMemo, useState } from "react";
 import type { ExampleModel } from "../api/types";
 export function ModelLibrary({
   examples,
+  allowLocalModelPaths,
   busy,
   onOpen,
 }: {
   examples: ExampleModel[];
+  allowLocalModelPaths: boolean;
   busy: boolean;
   onOpen: (path: string) => void;
 }) {
@@ -20,33 +22,35 @@ export function ModelLibrary({
   );
   return (
     <div className="model-library">
-      <form
-        className="path-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (path.trim()) onOpen(path.trim());
-        }}
-      >
-        <label htmlFor="local-model-path">Open a local model</label>
-        <div className="input-action">
-          <input
-            id="local-model-path"
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            placeholder="C:\models\example.dsh"
-          />
-          <button
-            className="primary"
-            disabled={busy || !path.trim()}
-            type="submit"
-          >
-            Open model
-          </button>
-        </div>
-        <small className="help">
-          Enter a .dsh path available to the local server.
-        </small>
-      </form>
+      {allowLocalModelPaths && (
+        <form
+          className="path-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (path.trim()) onOpen(path.trim());
+          }}
+        >
+          <label htmlFor="local-model-path">Open a local model</label>
+          <div className="input-action">
+            <input
+              id="local-model-path"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder="C:\models\example.dsh"
+            />
+            <button
+              className="primary"
+              disabled={busy || !path.trim()}
+              type="submit"
+            >
+              Open model
+            </button>
+          </div>
+          <small className="help">
+            Enter a .dsh path available to the local server.
+          </small>
+        </form>
+      )}
       <div className="library-heading">
         <h2>
           Example library <span>{examples.length}</span>

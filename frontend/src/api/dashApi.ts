@@ -12,26 +12,32 @@ import type {
   SolutionResponse,
   SourceResponse,
   StepRequest,
-  UIContextRequest
+  UIContextRequest,
 } from "./types";
 
 const API_ROOT = import.meta.env.VITE_API_ROOT ?? "";
+type SessionMetadata = SessionResponseMeta & {
+  modelLoaded: boolean;
+  lastOperation: string | null;
+};
+let sessionPromise: Promise<SessionMetadata> | null = null;
 
 async function responseError(response: Response) {
   const body = await response.json().catch(() => ({}));
   const detail = body.detail;
-  const message = typeof detail === "string"
-    ? detail
-    : typeof detail?.message === "string"
-      ? detail.message
-      : `${response.status} ${response.statusText}`;
+  const message =
+    typeof detail === "string"
+      ? detail
+      : typeof detail?.message === "string"
+        ? detail.message
+        : `${response.status} ${response.statusText}`;
   return new Error(message);
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options
+    ...options,
   });
 
   if (!response.ok) {
@@ -41,18 +47,45 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function ensureSession(): Promise<SessionMetadata> {
+  if (!sessionPromise) {
+    sessionPromise = request<SessionMetadata>("/api/session").catch((error) => {
+      sessionPromise = null;
+      throw error;
+    });
+  }
+  return sessionPromise;
+}
+
+async function sessionRequest<T>(
+  path: string,
+  options?: RequestInit,
+): Promise<T> {
+  await ensureSession();
+  return request<T>(path, options);
+}
+
 export const dashApi = {
-  session: () => request<SessionResponseMeta & { modelLoaded: boolean; lastOperation: string | null }>("/api/session"),
+  session: ensureSession,
 
   sessionContext: (sessionId: string) =>
-    request<SessionContext>(`/api/sessions/${encodeURIComponent(sessionId)}/context`),
+    sessionRequest<SessionContext>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/context`,
+    ),
 
-  updateUiContext: (sessionId: string, body: UIContextRequest, signal?: AbortSignal) =>
-    request<SessionResponseMeta>(`/api/sessions/${encodeURIComponent(sessionId)}/ui-context`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      signal
-    }),
+  updateUiContext: (
+    sessionId: string,
+    body: UIContextRequest,
+    signal?: AbortSignal,
+  ) =>
+    sessionRequest<SessionResponseMeta>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/ui-context`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+        signal,
+      },
+    ),
 
   llmCapabilities: () => request<LLMCapabilities>("/api/llm/capabilities"),
 
@@ -60,19 +93,24 @@ export const dashApi = {
     sessionId: string,
     body: ChatRequest,
     onEvent: (event: ChatStreamEvent) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ) => {
+    await ensureSession();
     const response = await fetch(
       `${API_ROOT}/api/sessions/${encodeURIComponent(sessionId)}/chat`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify(body),
-        signal
-      }
+        signal,
+      },
     );
     if (!response.ok) throw await responseError(response);
-    if (!response.body) throw new Error("The assistant returned no response stream.");
+    if (!response.body)
+      throw new Error("The assistant returned no response stream.");
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -103,52 +141,57 @@ export const dashApi = {
       if (done) break;
     }
     if (buffer.trim()) consume(buffer);
-    if (!result.completed) throw new Error("The assistant stream ended before completion.");
+    if (!result.completed)
+      throw new Error("The assistant stream ended before completion.");
     return result.completed;
   },
 
   examples: async () => {
-    const data = await request<{ examples: ExampleModel[] }>("/api/examples");
-    return data.examples;
+    return request<{
+      examples: ExampleModel[];
+      allowLocalModelPaths: boolean;
+    }>("/api/examples");
   },
 
   inspect: (filePath: string) =>
-    request<InspectResponse>("/api/inspect", {
+    sessionRequest<InspectResponse>("/api/inspect", {
       method: "POST",
-      body: JSON.stringify({ filePath })
+      body: JSON.stringify({ filePath }),
     }),
 
   load: (filePath: string) =>
-    request<DashModel & SessionResponseMeta>("/api/load", {
+    sessionRequest<DashModel & SessionResponseMeta>("/api/load", {
       method: "POST",
-      body: JSON.stringify({ filePath })
+      body: JSON.stringify({ filePath }),
     }),
 
   init: (body: InitRequest) =>
-    request<SolutionResponse>("/api/init", {
+    sessionRequest<SolutionResponse>("/api/init", {
       method: "POST",
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     }),
 
   step: (body: StepRequest) =>
-    request<SolutionResponse>("/api/step", {
+    sessionRequest<SolutionResponse>("/api/step", {
       method: "POST",
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     }),
 
   altTrans: (body: StepRequest) =>
-    request<SolutionResponse>("/api/solution/alt-trans", {
+    sessionRequest<SolutionResponse>("/api/solution/alt-trans", {
       method: "POST",
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     }),
 
   nextSolution: () =>
-    request<SolutionResponse>("/api/solution/next", { method: "POST" }),
+    sessionRequest<SolutionResponse>("/api/solution/next", { method: "POST" }),
 
   nextInitSolution: () =>
-    request<SolutionResponse>("/api/solution/next-init", { method: "POST" }),
+    sessionRequest<SolutionResponse>("/api/solution/next-init", {
+      method: "POST",
+    }),
 
-  source: () => request<SourceResponse>("/api/source"),
+  source: () => sessionRequest<SourceResponse>("/api/source"),
 
-  generated: () => request<GeneratedResponse>("/api/generated")
+  generated: () => sessionRequest<GeneratedResponse>("/api/generated"),
 };

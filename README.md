@@ -16,6 +16,7 @@ Java session server runs the Dash+/Alloy parser, translator, and solver.
 - Compare events and variables across the current trace.
 - Inspect Dash source, translated Alloy, and generated solver fragments.
 - Ask a LLM assistant about the active model and simulation session.
+- Keep each browser visitor in an isolated, expiring solver session.
 
 ## Architecture
 
@@ -158,6 +159,24 @@ python -m app.main
 ```
 
 Then open [http://127.0.0.1:8010](http://127.0.0.1:8010) in your web browser.
+
+## Hosted-session settings
+
+The backend gives each browser an HTTP-only session cookie and starts a
+dedicated Java solver process only when that session opens a model. The default
+limit is 16 active sessions and inactive sessions expire after one hour. These
+settings can be adjusted for a hosted deployment:
+
+```bash
+DASH_MAX_SESSIONS=8
+DASH_SESSION_TTL_SECONDS=1800
+DASH_SECURE_COOKIES=true
+DASH_ALLOW_LOCAL_MODEL_PATHS=false
+```
+
+When local model paths are disabled, only models under `backend/examples` (and
+any roots listed in `DASH_ALLOWED_MODEL_ROOTS`) may be opened. Multiple allowed
+roots use the operating system's path separator.
 
 ## Simulation Notes
 

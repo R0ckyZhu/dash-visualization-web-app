@@ -65,9 +65,10 @@ const second = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(dashApi.examples).mockResolvedValue([
-    { name: "Test light", path: "test.dsh", group: "Examples" },
-  ]);
+  vi.mocked(dashApi.examples).mockResolvedValue({
+    examples: [{ name: "Test light", path: "test.dsh", group: "Examples" }],
+    allowLocalModelPaths: true,
+  });
   vi.mocked(dashApi.session).mockResolvedValue({
     ...meta,
     modelLoaded: false,

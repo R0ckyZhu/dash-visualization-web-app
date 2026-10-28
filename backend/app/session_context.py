@@ -89,18 +89,22 @@ class AppSessionContext:
 
 
 class SessionContextStore:
-    """Canonical model and simulation context for the future LLM layer.
-
-    The Java bridge currently owns one solver process, so the initial registry
-    intentionally exposes one default app session. Keeping the ID in the API
-    allows multiple isolated solver sessions to be added later without another
-    frontend contract change.
-    """
+    """Canonical model and simulation context, keyed by browser session."""
 
     def __init__(self):
         self._sessions = {
             DEFAULT_SESSION_ID: AppSessionContext(id=DEFAULT_SESSION_ID)
         }
+
+    def create(self, session_id: str) -> AppSessionContext:
+        if session_id in self._sessions:
+            return self._sessions[session_id]
+        session = AppSessionContext(id=session_id)
+        self._sessions[session_id] = session
+        return session
+
+    def delete(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
 
     def get(self, session_id: str = DEFAULT_SESSION_ID) -> AppSessionContext:
         try:
