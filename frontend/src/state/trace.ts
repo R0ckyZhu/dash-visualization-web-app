@@ -93,7 +93,8 @@ export function solutionToTrace(solution: SolutionResponse | null, model: DashMo
   const snapshots = (solution.snapshots ?? []).map((snapshot, index) => {
     const activeStates = new Set<string>();
     const takenTransitions = new Set<string>();
-    let stable: boolean | null = null;
+    // Models without big steps have no stable field: every snapshot is stable.
+    let stable: boolean | null = true;
 
     for (const [field, value] of Object.entries(snapshot)) {
       if (isConfField(field)) {

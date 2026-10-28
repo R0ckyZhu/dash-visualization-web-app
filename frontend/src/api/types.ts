@@ -74,6 +74,8 @@ export interface DashModel {
 export interface InspectResponse extends SessionResponseMeta {
   model: DashModel;
   scopeSigs: string[];
+  /** Per-model starting scopes; sigs without a bundled default start at 1. */
+  defaultScopes?: Record<string, number>;
   commandCount: number;
 }
 

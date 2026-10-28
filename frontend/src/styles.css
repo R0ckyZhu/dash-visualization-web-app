@@ -1658,10 +1658,6 @@ pre { font-size: 13px; line-height: 1.65; }
   .command-end { margin-left: 0; }
 }
 @media (max-width: 999px) {
-  .support-open .main-content { display: none; }
-  .support-panel { width: 100%; }
-  .panel-resizer { display: none; }
-  .explore-tree { height: 300px; }
   .source-switch { display: flex; gap: 4px; }
   .source-view { grid-template-columns: minmax(0, 1fr); }
   .source-dsh .alloy-source, .source-als .dash-source { display: none; }
@@ -1697,3 +1693,54 @@ pre { font-size: 13px; line-height: 1.65; }
 
 button, input, select, textarea { font-family: inherit; }
 .configuration-panel textarea { font-family: "Cascadia Mono", Consolas, monospace; }
+
+/* Two-panel demo layout: the main view and the explored Kripke structure are always shown. */
+.support-panel { display: flex; flex-direction: column; }
+.explore-panel { display: flex; flex-direction: column; min-height: 0; }
+.explore-panel > * { flex: none; }
+.explore-panel > .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid #304153; }
+.explore-panel > .panel-header span { font-size: 12px; color: #a3b5c6; }
+.explore-tree { height: clamp(260px, 46vh, 560px); }
+.tree-legend .legend-current { color: #f2bd4a; }
+.tree-legend .legend-path { color: #6ab7ff; }
+
+/* Trace view: one column per snapshot, one row per piece of snapshot information. */
+.main-content > .trace-view { flex: 1; }
+.trace-view { display: flex; flex-direction: column; min-height: 0; }
+.trace-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 0 0 12px; }
+.trace-filters input[type="search"] { width: 240px; height: 34px; font-size: 13px; padding: 0 10px; }
+.trace-kind-toggles { display: flex; gap: 4px; }
+.trace-kind-toggles button { height: 32px; font-size: 12px; padding: 0 10px; color: var(--text-secondary); }
+.trace-kind-toggles button.toggle-on { background: #253b50; border-color: #5b829f; color: #bfe3ff; }
+.trace-filters label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.trace-filters input[type="checkbox"] { min-width: 0; width: 16px; height: 16px; }
+.trace-count { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+.trace-scroll { flex: 1; min-height: 0; max-height: none; margin-bottom: 8px; }
+.trace-table th, .trace-table td { padding: 8px 12px; white-space: nowrap; }
+.trace-table td { cursor: pointer; text-align: center; font: 12px/1.4 "Cascadia Mono", Consolas, monospace; }
+.trace-table tbody th { text-align: left; font-weight: 500; min-width: 160px; }
+.trace-table tbody th button { height: auto; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-decoration: underline dotted #5b829f; text-underline-offset: 3px; }
+.trace-table .current-col { background: #1b2d40; }
+.trace-table thead th.current-col { background: #2a4560; box-shadow: inset 0 -3px #6ab7ff; color: #d6edff; }
+.trace-table td.changed { background: #1d302b; box-shadow: inset 0 -2px #3f8f6a; }
+.trace-table td.current-col.changed { background: #1f3a42; }
+.trace-table td.present { color: var(--state-active); }
+.trace-table tr.group-start > * { border-top: 2px solid #3d5266; }
+.trace-table .row-group { display: block; margin-bottom: 4px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #89a8c0; }
+.trace-table tr.row-selected > th { background: #3a2a22; color: #ffccbc; box-shadow: inset 3px 0 #ff8a65; }
+.trace-table tr.row-selected > td { background: #261f1d; }
+.trace-table td.cell-hit, .trace-table tr.row-selected > td.cell-hit { background: #5a3526; color: #ffe0d6; outline: 1px solid #ff8a65; outline-offset: -1px; }
+.trace-help { margin: 4px 0 8px; }
+
+@media (max-width: 759px) {
+  .panel-resizer { display: none; }
+  .explore-tree { height: 300px; }
+  .workspace { flex-direction: column; overflow: auto; gap: 12px; }
+  .main-content { flex: none; min-height: 70vh; }
+  .support-panel { width: 100%; overflow: visible; }
+  .trace-count { margin-left: 0; }
+  .trace-filters input[type="search"] { width: 100%; }
+}
+@media (min-width: 760px) and (max-width: 1199px) {
+  .support-panel { width: min(var(--support-width, 420px), 42vw); }
+}

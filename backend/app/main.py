@@ -154,6 +154,34 @@ _GROUP_LABELS = {
 }
 
 
+# Bundled examples the current Dash+ toolchain cannot load, kept out of the library:
+#   nasa-fgs-mode-logic  parser stops on the legacy syntax
+#   railway              primes an env variable (ct'), which Dash+ rejects
+#   carousel             translator emits util/ordering under the alias "ord" twice
+_HIDDEN_EXAMPLES = {
+    "2019-dash-website/nasa-fgs-mode-logic/nasa-fgs-mode-logic.dsh",
+    "2022-bandali-thesis/railway/railway.dsh",
+    "2022-tamjid-thesis/carousel/carousel.dsh",
+}
+
+
+def _default_scopes(file_path: str, scope_sigs: list[str]) -> dict[str, int]:
+    """Per-model starting scopes from an optional `<model>.scopes.json` beside the .dsh.
+
+    Some models are unsatisfiable at scope 1 (the elevator's init needs three
+    floors), so a uniform default would make them look broken.
+    """
+    sidecar = Path(file_path).with_suffix(".scopes.json")
+    try:
+        configured = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        configured = {}
+    return {
+        sig: configured[sig] if isinstance(configured.get(sig), int) else 1
+        for sig in scope_sigs
+    }
+
+
 def _read_dsh_source(file_path: str) -> str | None:
     try:
         return Path(file_path).read_text(encoding="utf-8")
@@ -204,6 +232,8 @@ async def list_examples():
     items = []
     for dsh in sorted(EXAMPLES_DIR.rglob("*.dsh")):
         rel = dsh.relative_to(EXAMPLES_DIR)
+        if rel.as_posix() in _HIDDEN_EXAMPLES:
+            continue
         group = rel.parts[0]
         folder = dsh.parent
         siblings = list(folder.glob("*.dsh"))
@@ -467,6 +497,7 @@ async def inspect_model(
         session = await managed.solver()
         try:
             data = await session.inspect_file(file_path)
+            data["defaultScopes"] = _default_scopes(file_path, data.get("scopeSigs", []))
             translation = session.current_translation or {}
             context_store.replace_model(
                 model=data["model"],

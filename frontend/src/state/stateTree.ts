@@ -130,12 +130,11 @@ export function extendStateTree(
       node.snapshot = { ...node.snapshot, terminal: true };
     }
 
+    // A step back to the same snapshot is a self-loop in the Kripke structure.
     const transition = successor.takenTransitions[0] ?? "";
-    if (source !== node.id) {
-      const edgeKey = `${source}:${node.id}:${transition}`;
-      if (!edges.some((edge) => edge.id === edgeKey)) {
-        edges.push({ id: edgeKey, source, target: node.id, transition });
-      }
+    const edgeKey = `${source}:${node.id}:${transition}`;
+    if (!edges.some((edge) => edge.id === edgeKey)) {
+      edges.push({ id: edgeKey, source, target: node.id, transition });
     }
 
     nodeIds.push(node.id);

@@ -1,61 +1,67 @@
 import { useState } from "react";
 import type { DashModel } from "../api/types";
-import { StateTreeGraph } from "../graph/StateTreeGraph";
+import { KripkeGraph } from "../graph/KripkeGraph";
 import type { StateTree } from "../state/stateTree";
 import { SelectionDetails, type DetailSelection } from "./SelectionDetails";
+
 export function ExplorePanel({
   model,
   tree,
   cursor,
+  pathNodeIds,
   selection,
+  edgeLabel,
   onSelection,
   onSelectNode,
-  treeOpen,
-  onTreeOpen,
+  onSelectTransition,
 }: {
   model: DashModel;
   tree: StateTree;
   cursor: number | null;
+  pathNodeIds: number[];
   selection: DetailSelection;
+  edgeLabel: (transitionId: string) => string;
   onSelection: (value: DetailSelection) => void;
   onSelectNode: (id: number) => void;
-  treeOpen: boolean;
-  onTreeOpen: (open: boolean) => void;
+  onSelectTransition: (transitionId: string, targetNodeId: number) => void;
 }) {
   const [query, setQuery] = useState("");
+  const selectedTransition =
+    selection?.kind === "transition" ? selection.value : null;
   return (
     <div className="explore-panel">
-      <div className="panel-section-heading">
-        <h2>
-          State tree <span>{tree.nodes.length} snapshots</span>
-        </h2>
-        <button aria-expanded={treeOpen} onClick={() => onTreeOpen(!treeOpen)}>
-          {treeOpen ? "Hide tree" : "Show tree"}
-        </button>
-      </div>
-      {treeOpen && (
-        <div className="explore-tree">
-          <StateTreeGraph
-            tree={tree}
-            currentNodeId={cursor}
-            onSelectNode={(id) => {
-              onSelectNode(id);
-              const node = tree.nodes.find((n) => n.id === id);
-              if (node) onSelection({ kind: "snapshot", value: node });
-            }}
-            onSelectTransition={(id) => {
-              const value = model.transitions.find(
-                (t) => t.id === id || t._originalId === id,
-              );
-              onSelection({ kind: "transition", value: value ?? { id } });
-            }}
-          />
+      <div className="panel-header">
+        <div>
+          <p className="eyebrow">EXPLORE</p>
+          <h2>Explored Kripke Structure</h2>
         </div>
-      )}
+        <span>
+          {tree.nodes.length} snapshots · {tree.edges.length} steps
+        </span>
+      </div>
+      <div className="explore-tree">
+        <KripkeGraph
+          tree={tree}
+          currentNodeId={cursor}
+          pathNodeIds={pathNodeIds}
+          selectedNodeId={
+            selection?.kind === "snapshot" ? selection.value.id : null
+          }
+          edgeLabel={edgeLabel}
+          isSelectedTransition={(id) =>
+            selectedTransition != null &&
+            (id === selectedTransition.id ||
+              id === selectedTransition._originalId)
+          }
+          onSelectNode={onSelectNode}
+          onSelectTransition={onSelectTransition}
+        />
+      </div>
       <div className="tree-legend">
-        <span>● Stable</span>
+        <span>▭ Stable</span>
         <span>△ Unstable</span>
-        <span>◎ Current</span>
+        <span className="legend-current">▭ Current</span>
+        <span className="legend-path">— Current path</span>
       </div>
       <SelectionDetails
         selection={selection}

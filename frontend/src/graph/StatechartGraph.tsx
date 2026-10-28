@@ -793,7 +793,7 @@ export function StatechartGraph({
             onClick={() => onOverlayModeChange(eventsVisible ? null : "events")}
             type="button"
           >
-            Events
+            {eventsVisible ? "Hide events" : "Show events"}
           </button>
           <button
             className={variablesVisible ? "toggle-on" : ""}
@@ -801,7 +801,7 @@ export function StatechartGraph({
             onClick={() => onOverlayModeChange(variablesVisible ? null : "variables")}
             type="button"
           >
-            Variables
+            {variablesVisible ? "Hide variables" : "Show variables"}
           </button>
         </div>
       </div>

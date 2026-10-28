@@ -83,7 +83,6 @@ function SnapshotDetails({ node }: { node: StateTreeNode }) {
       <dl>
         <DetailRow label="Name">{node.label}</DetailRow>
         <DetailRow label="Stable">{node.snapshot.stable === false ? "No" : "Yes"}</DetailRow>
-        <DetailRow label="Terminal">{node.snapshot.terminal ? "Yes" : "No"}</DetailRow>
         <DetailRow label="Transition">
           {node.snapshot.takenTransitions.map(shortName).join(", ") || "none"}
         </DetailRow>

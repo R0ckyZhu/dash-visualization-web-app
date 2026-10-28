@@ -11,7 +11,7 @@ export function ScopeDialog({
   scopeSigs: string[];
   hasRun: boolean;
   onClose: () => void;
-  onApply: (scopes: Record<string, number>, start: boolean) => void;
+  onApply: (scopes: Record<string, number>) => void;
 }) {
   const [draft, setDraft] = useState(() =>
     Object.fromEntries(scopeSigs.map((sig) => [sig, String(scopes[sig] ?? 1)])),
@@ -22,24 +22,23 @@ export function ScopeDialog({
       Number(draft[sig]) >= 1 &&
       Number(draft[sig]) <= 20,
   );
-  function submit(start: boolean) {
-    if (valid)
-      onApply(
-        Object.fromEntries(scopeSigs.map((sig) => [sig, Number(draft[sig])])),
-        start,
-      );
-  }
   return (
     <Modal title="Model scopes" onClose={onClose}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          submit(true);
+          if (valid)
+            onApply(
+              Object.fromEntries(
+                scopeSigs.map((sig) => [sig, Number(draft[sig])]),
+              ),
+            );
         }}
       >
         <div className="modal-body">
           <p className="help">
-            Choose how many instances of each signature to explore.
+            Choose exactly how many instances of each signature the simulation
+            uses.
           </p>
           {scopeSigs.map((sig) => (
             <label className="scope-row" key={sig}>
@@ -64,8 +63,8 @@ export function ScopeDialog({
           )}
           {hasRun && (
             <p className="notice">
-              Applying changed scopes resets the current trace and state tree.
-              Cancel keeps your run.
+              Starting with new scopes replaces the current trace and Kripke
+              structure. Cancel keeps your run.
             </p>
           )}
         </div>
@@ -73,11 +72,8 @@ export function ScopeDialog({
           <button type="button" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" disabled={!valid} onClick={() => submit(false)}>
-            Apply
-          </button>
           <button className="primary" type="submit" disabled={!valid}>
-            Apply and start
+            Start simulation
           </button>
         </footer>
       </form>

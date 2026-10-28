@@ -30,7 +30,7 @@ export function ModelLibrary({
             if (path.trim()) onOpen(path.trim());
           }}
         >
-          <label htmlFor="local-model-path">Open a local model</label>
+          <label htmlFor="local-model-path">Open a local Dash+ model</label>
           <div className="input-action">
             <input
               id="local-model-path"
@@ -47,7 +47,7 @@ export function ModelLibrary({
             </button>
           </div>
           <small className="help">
-            Enter a .dsh path available to the local server.
+            Enter a Dash+ (.dsh) path available to the local server.
           </small>
         </form>
       )}
