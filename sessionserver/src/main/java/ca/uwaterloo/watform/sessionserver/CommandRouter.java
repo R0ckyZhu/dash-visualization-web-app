@@ -184,22 +184,37 @@ public class CommandRouter {
         // models that omit `sig PARAM {}` crash at AMFieldTable arity computation.
         // Read the source, inject any missing param sigs, and hand the patched
         // text to the parser via a temp file in the same directory (so any
-        // relative `open util/...` imports still resolve identically).
+        // relative `open util/...` imports still resolve identically). A hosted
+        // deployment mounts the models read-only, so fall back to the system temp
+        // directory there; the bundled models only open library modules.
         Path effectivePath = path;
         Path tempPath = null;
+        String source;
         try {
-            String source = java.nio.file.Files.readString(path);
-            String patched = injectMissingDashParamSigs(source);
-            if (!patched.equals(source)) {
-                // Keep the .dsh extension (the parser rejects unknown extensions).
-                String orig = path.getFileName().toString();
-                String base = orig.endsWith(".dsh") ? orig.substring(0, orig.length() - 4) : orig;
-                tempPath = path.resolveSibling("." + base + ".autosig.dsh");
-                java.nio.file.Files.writeString(tempPath, patched);
-                effectivePath = tempPath;
-            }
+            source = java.nio.file.Files.readString(path);
         } catch (java.io.IOException e) {
             return errorResponse("Could not read source file: " + e.getMessage());
+        }
+        String patched = injectMissingDashParamSigs(source);
+        if (!patched.equals(source)) {
+            // Keep the .dsh extension (the parser rejects unknown extensions). The
+            // name is unique so concurrent sessions never share a patched copy.
+            String orig = path.getFileName().toString();
+            String base = orig.endsWith(".dsh") ? orig.substring(0, orig.length() - 4) : orig;
+            try {
+                tempPath = java.nio.file.Files.createTempFile(
+                        path.getParent(), "." + base + ".", ".autosig.dsh");
+                java.nio.file.Files.writeString(tempPath, patched);
+            } catch (java.io.IOException readOnlyModelDir) {
+                try {
+                    if (tempPath != null) java.nio.file.Files.deleteIfExists(tempPath);
+                    tempPath = java.nio.file.Files.createTempFile(base + ".", ".autosig.dsh");
+                    java.nio.file.Files.writeString(tempPath, patched);
+                } catch (java.io.IOException e) {
+                    return errorResponse("Could not stage patched model: " + e.getMessage());
+                }
+            }
+            effectivePath = tempPath;
         }
 
         Reporter.INSTANCE.reset();
