@@ -1,7 +1,7 @@
 # Elevator model: original source, annotated with fixes
 
 Original: `backend/examples/2022-tamjid-thesis/elevator/elevator.dsh`
-Fixed version: `elevator-fixed.dsh` (this folder).
+Fixed version: `elevator.dsh` (this folder).
 
 Background: in the generated Alloy, a transition constrains only what its
 `do` block writes. The translation adds frames for everything else, but they

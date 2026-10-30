@@ -212,7 +212,7 @@ the generated post-conditions.
    from those dumps.
 2. In any dump, check each `*_post` predicate for `sn.System_Elevator_current`
    / `direction` / `called`: classify as exact, set-image, or absent.
-3. Compare against `elevator-fixed.dsh` in this folder: adding the strong
+3. Compare against `elevator.dsh` in this folder: adding the strong
    frames by hand (see `FIXES.md`) eliminates all drift at 2 elevators
    (`trace-2elev-3floors.md`). What hand-fixes cannot repair: with 3+
    elevators, the set-image frames still allow the *non-acting* elevators to

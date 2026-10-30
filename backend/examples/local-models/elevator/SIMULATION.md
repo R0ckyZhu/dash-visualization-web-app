@@ -2,7 +2,7 @@
 
 How the web app simulates a Dash model, end to end, illustrated with the
 elevator model (`PID = 2` elevators, `Floor = 3`) and real artifacts from a
-recorded session. Applies to `elevator-fixed.dsh` and any other model; the
+recorded session. Applies to `local-models/elevator/elevator.dsh` and any other model; the
 elevator exercises every part of the pipeline (auto-injected param sig,
 aliasless ordering, enum, multi-domain).
 
@@ -165,7 +165,7 @@ Constraint layers of a step solve, summarized:
   `fact { some aldb_order/last.__taken0 and aldb_order/last.__taken0 not in (T1 + ...) }`
   forcing a transition not yet shown from this node.
 
-## Worked run (elevator-fixed, recorded)
+## Worked run (local-models elevator, recorded)
 
 Ordering extracted at init: ground = F1, then F0, top = F2.
 

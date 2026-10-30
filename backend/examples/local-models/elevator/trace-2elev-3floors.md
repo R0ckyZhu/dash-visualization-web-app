@@ -1,4 +1,4 @@
-# elevator-fixed: recorded simulation trace
+# local-models elevator: recorded simulation trace
 
 Config: `PID = 2` elevators, `Floor = 3`, simplified mode.
 Extracted ordering (from the init response): `Floor_1 < Floor_0 < Floor_2`

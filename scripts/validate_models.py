@@ -6,7 +6,7 @@ def request(path, body=None):
     req = urllib.request.Request(BASE + path, data=json.dumps(body).encode() if body is not None else None, headers={'Content-Type':'application/json'})
     with urllib.request.urlopen(req, timeout=90) as response: return json.load(response)
 examples=request('/api/examples')['examples']
-cases=[('traffic-light','2019',{}), ('digital-watch','2023',{}), ('bit-counter-1','Local',{'PID':2}), ('bit-counter-2','Local',{'PID':2}), ('elevator-fixed','Local',{'PID':2,'Floor':3})]
+cases=[('traffic-light','2019',{}), ('digital-watch','2023',{}), ('bit-counter-A','Local',{'PID':2}), ('bit-counter-B','Local',{'PID':2}), ('elevator','Local',{'PID':2,'Floor':3})]
 report=[]
 for name,group,overrides in cases:
   example=next(e for e in examples if e['name']==name and group in e['group'])
