@@ -41,29 +41,17 @@ export function ModelElementDetails({
   onClose: () => void;
   selection: StatechartSelection | null;
 }) {
+  if (!selection) return null;
+  const title = selection.kind === "state" ? "State info" : "Transition info";
   return (
-    <section
-      className={`selection-details${selection ? " has-selection" : ""}`}
-    >
+    <section className="selection-details has-selection">
       <header>
-        <h3>
-          {selection?.kind === "state"
-            ? "State"
-            : selection?.kind === "transition"
-              ? "Transition"
-              : "Definition"}
-        </h3>
-        {selection ? (
-          <button aria-label="Close definition" onClick={onClose} type="button">
-            ×
-          </button>
-        ) : null}
+        <h3>{title}</h3>
+        <button aria-label={`Close ${title.toLowerCase()}`} onClick={onClose} type="button">
+          ×
+        </button>
       </header>
-      {!selection ? (
-        <p className="selection-placeholder">
-          Click a state or transition to see its definition.
-        </p>
-      ) : selection.kind === "state" ? (
+      {selection.kind === "state" ? (
         <dl>
           <DetailRow label="Name">{selection.value.id}</DetailRow>
           <DetailRow label="Kind">{selection.value.kind}</DetailRow>

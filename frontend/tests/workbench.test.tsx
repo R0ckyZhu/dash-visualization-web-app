@@ -346,6 +346,19 @@ describe("static and dynamic panels", () => {
     expect(within(info).getByText("Int -8 … 7 (4-bit)")).toBeTruthy();
     expect(within(info).getByText("Const.limit = 7")).toBeTruthy();
   });
+  it("shows state info only after a state is clicked", async () => {
+    const user = await openAndStart();
+    const details = screen.getByRole("complementary", { name: "Model details" });
+    expect(within(details).queryByRole("heading", { name: /info/ })).toBeNull();
+    await user.click(within(details).getByText("Browse states and transitions"));
+    await user.click(within(details).getByRole("button", { name: /Light\/Off/ }));
+    const info = within(details)
+      .getByRole("heading", { name: "State info" })
+      .closest("section")!;
+    expect(within(info).getByText("Light/Off")).toBeTruthy();
+    await user.click(within(info).getByRole("button", { name: "Close state info" }));
+    expect(within(details).queryByRole("heading", { name: /info/ })).toBeNull();
+  });
   it("keeps transition definitions out of the snapshot info", async () => {
     const { user, region } = await stepAndOpenTrace();
     const takenRow = within(region).getByText("Transition taken").closest("tr")!;
@@ -360,7 +373,7 @@ describe("static and dynamic panels", () => {
     );
     const details = screen.getByRole("complementary", { name: "Model details" });
     const definition = within(details)
-      .getByRole("heading", { name: "Transition" })
+      .getByRole("heading", { name: "Transition info" })
       .closest("section")!;
     expect(within(definition).getByText("Light/Toggle")).toBeTruthy();
   });
