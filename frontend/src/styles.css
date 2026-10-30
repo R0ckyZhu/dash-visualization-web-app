@@ -1732,6 +1732,43 @@ button, input, select, textarea { font-family: inherit; }
 .trace-table td.cell-hit, .trace-table tr.row-selected > td.cell-hit { background: #5a3526; color: #ffe0d6; outline: 1px solid #ff8a65; outline-offset: -1px; }
 .trace-help { margin: 4px 0 8px; }
 
+/* Kripke view overlay: the current snapshot's events and variables over the graph. */
+.explore-tree { position: relative; }
+.kripke-overlay { position: absolute; top: 8px; right: 8px; z-index: 4; width: max-content; max-width: min(260px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 10px; background: #0f1923e6; border: 1px solid #36506a; border-radius: 8px; box-shadow: 0 6px 24px #0007; }
+.kripke-overlay > header { font-size: 12px; font-weight: 700; color: #f2bd4a; }
+.kripke-overlay-group { display: flex; flex-direction: column; gap: 4px; }
+.kripke-overlay-group > small { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #89a8c0; }
+.kripke-overlay .event-chip { align-self: flex-start; white-space: normal; }
+.kripke-overlay .variable-chip { justify-content: space-between; }
+.kripke-overlay .variable-value { overflow-wrap: anywhere; text-align: right; }
+
+/* Hierarchy view: the statechart with a static-details column beside it. */
+.hierarchy-body { display: flex; flex: 1; min-height: 0; }
+.hierarchy-body > .statechart-component { min-width: 0; }
+.hierarchy-inspector { width: 300px; flex: none; overflow: auto; border-left: 1px solid #263b4f; background: #121c27; }
+.graph-controls-end { margin-left: auto; display: flex; gap: 6px; }
+.selection-details dd pre { margin: 0; padding: 0; background: transparent; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; }
+.static-info { border-bottom: 1px solid #304153; padding: 0 0 12px; }
+.static-info > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 16px; background: #1c2a38; }
+.static-info > header h3 { margin: 0; font-size: 14px; }
+.static-info > header small { color: #9db0bf; font-size: 11px; }
+.static-info .selection-placeholder { padding: 0 16px; }
+.static-group { padding: 10px 16px 0; }
+.static-group h4 { margin: 0 0 6px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #89a8c0; }
+.static-group code, .static-sig code { display: block; font: 12px/1.5 "Cascadia Mono", Consolas, monospace; color: #d7e3ee; overflow-wrap: anywhere; }
+.static-sig { padding: 6px 0; border-top: 1px solid #22313f; }
+.static-sig:first-of-type { border-top: 0; }
+.static-sig-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.static-sig-head strong { font-size: 13px; font-weight: 600; }
+.static-sig-head small { color: #9db0bf; font-size: 11px; }
+.hierarchy-inspector .object-browser { padding: 0 16px 16px; }
+@media (min-width: 1000px) { .source-tools { display: none; } }
+@media (max-width: 1199px) {
+  .hierarchy-body { flex-direction: column; }
+  .hierarchy-body > .statechart-component { min-height: 360px; }
+  .hierarchy-inspector { width: auto; max-height: 42%; border-left: 0; border-top: 1px solid #263b4f; }
+}
+
 @media (max-width: 759px) {
   .panel-resizer { display: none; }
   .explore-tree { height: 300px; }

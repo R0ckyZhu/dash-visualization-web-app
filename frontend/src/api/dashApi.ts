@@ -11,6 +11,7 @@ import type {
   SessionResponseMeta,
   SolutionResponse,
   SourceResponse,
+  StaticInfoResponse,
   StepRequest,
   UIContextRequest,
 } from "./types";
@@ -194,4 +195,5 @@ export const dashApi = {
   source: () => sessionRequest<SourceResponse>("/api/source"),
 
   generated: () => sessionRequest<GeneratedResponse>("/api/generated"),
+  staticInfo: () => sessionRequest<StaticInfoResponse>("/api/static"),
 };

@@ -111,3 +111,24 @@ export function activeEventSets(raw: Record<string, unknown> | null) {
   }
   return { bare, tuples };
 }
+
+/** Short names of the model events present in a snapshot; parameterized ones carry their instance. */
+export function presentEventLabels(
+  events: Array<{ id: string; params?: unknown[] }>,
+  raw: Record<string, unknown> | null
+) {
+  const { bare, tuples } = activeEventSets(raw);
+  const labels: string[] = [];
+  for (const event of events) {
+    const atom = normalizeSnapshotAtom(event.id.replace(/\//g, "_"));
+    const name = event.id.split("/").pop() ?? event.id;
+    if ((event.params?.length ?? 0) === 0) {
+      if (bare.has(atom)) labels.push(name);
+      continue;
+    }
+    for (const tuple of [...tuples].sort()) {
+      if (tuple.endsWith(`->${atom}`)) labels.push(`${name}[${tuple.slice(0, -atom.length - 2)}]`);
+    }
+  }
+  return labels;
+}

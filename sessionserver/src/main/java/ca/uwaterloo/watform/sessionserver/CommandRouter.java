@@ -72,6 +72,9 @@ public class CommandRouter {
     // sigs would have those survive (and get pinned) with no code change.
     private String extractedDomainPins;
     private List<GeneratedAlloyFragment> extractedDomainPinFragments = Collections.emptyList();
+    // The same init response, summarized for display: the model's own sigs and their atoms,
+    // static field values, ordering valuations and the integer range. Null before init.
+    private JsonObject currentStaticInfo;
 
     // Web-app simulation state
     private Map<String, Integer> currentSigScopes; // e.g., {PID: 2, Floor: 3}
@@ -155,6 +158,7 @@ public class CommandRouter {
                 case "next-init" -> handleNextInit();
                 case "tables" -> handleTables();
                 case "generated" -> handleGenerated();
+                case "static" -> handleStatic();
                 default -> errorResponse("Unknown command: " + command);
             };
         } catch (Reporter.AbortSignal e) {
@@ -1576,9 +1580,11 @@ public class CommandRouter {
     private void extractDomainInfoFromSolution() {
         extractedDomainPins = null;
         extractedDomainPinFragments = Collections.emptyList();
+        currentStaticInfo = null;
         try {
             if (currentSolution == null || !currentSolution.isSat) return;
             Instance instance = currentSolution.instance.get();
+            currentStaticInfo = buildStaticInfo(instance);
             extractedDomainPinFragments = buildDomainPinFragments(instance);
             extractedDomainPins = renderFragments(extractedDomainPinFragments);
             if (!extractedDomainPins.isEmpty()) {
@@ -1718,6 +1724,180 @@ public class CommandRouter {
         return field.nameSpace + "/" + field.sigParent + "." + field.name;
     }
 
+    private JsonObject handleStatic() {
+        if (currentStaticInfo == null) {
+            JsonObject data = new JsonObject();
+            data.addProperty("available", false);
+            return okResponse(data);
+        }
+        return okResponse(currentStaticInfo);
+    }
+
+    private static final Pattern SIG_DECLARATION =
+            Pattern.compile(
+                    "(?m)^\\s*((?:(?:abstract|one|lone|some|private|var)\\s+)*)sig\\s+"
+                            + "([A-Za-z_][A-Za-z0-9_]*(?:\\s*,\\s*[A-Za-z_][A-Za-z0-9_]*)*)"
+                            + "(?:\\s+(?:extends|in)\\s+([A-Za-z_][A-Za-z0-9_]*))?\\s*\\{");
+
+    private static final Pattern OPEN_DECLARATION =
+            Pattern.compile("(?m)^\\s*open\\s+([\\w/]+)\\s*(\\[[^\\]]*\\])?(?:\\s*as\\s+(\\w+))?");
+
+    private static final java.util.Comparator<String> NATURAL_ORDER =
+            (left, right) -> {
+                Matcher l = Pattern.compile("^(.*?)(\\d+)$").matcher(left);
+                Matcher r = Pattern.compile("^(.*?)(\\d+)$").matcher(right);
+                if (l.matches() && r.matches() && l.group(1).equals(r.group(1))) {
+                    return Long.compare(Long.parseLong(l.group(2)), Long.parseLong(r.group(2)));
+                }
+                return left.compareTo(right);
+            };
+
+    /**
+     * Summarize the static part of an init response for display. The model's own sigs are the
+     * declared sigs with no {@code __}-prefixed ancestor (the translator roots states,
+     * transitions, events and snapshots at {@code __States}, {@code __Transitions}, ...). A
+     * {@code one sig} extending another model sig (an enum member such as {@code Up}) is folded
+     * into its parent's atoms. Static field values and orderings come from the same static
+     * bucket that {@link #buildDomainPinFragments} pins into later solves.
+     */
+    private JsonObject buildStaticInfo(Instance instance) {
+        JsonObject info = new JsonObject();
+        info.addProperty("available", true);
+
+        JsonObject integers = new JsonObject();
+        integers.addProperty("min", instance.minInt());
+        integers.addProperty("max", instance.maxInt());
+        integers.addProperty("seqLength", instance.seqInt());
+        info.add("integers", integers);
+
+        String code = currentAlloyModel == null ? "" : currentAlloyModel.toString();
+
+        JsonArray modules = new JsonArray();
+        Matcher open = OPEN_DECLARATION.matcher(code);
+        while (open.find()) {
+            if ("util/traces".equals(open.group(1))) continue; // simulation machinery
+            String text = open.group(1);
+            if (open.group(2) != null) text += " " + open.group(2).replaceAll("\\s+", "");
+            if (open.group(3) != null) text += " as " + open.group(3);
+            modules.add(text);
+        }
+        info.add("modules", modules);
+
+        Map<String, String> parents = new LinkedHashMap<>();
+        Map<String, String> modifiers = new LinkedHashMap<>();
+        Matcher decl = SIG_DECLARATION.matcher(code);
+        while (decl.find()) {
+            for (String name : decl.group(2).split("\\s*,\\s*")) {
+                parents.put(name, decl.group(3));
+                modifiers.put(name, decl.group(1).trim().replaceAll("\\s+", " "));
+            }
+        }
+        java.util.function.Predicate<String> isModelSig =
+                name -> {
+                    for (String sig = name; sig != null; sig = parents.get(sig)) {
+                        if (sig.startsWith("__")) return false;
+                    }
+                    return parents.containsKey(name);
+                };
+
+        Map<String, List<String>> atomsBySig = new LinkedHashMap<>();
+        for (Qname sig : instance.allSigQnames()) {
+            if (!"this".equals(sig.nameSpace) || !isModelSig.test(sig.name)) continue;
+            List<String> atoms = new ArrayList<>();
+            for (String atom : instance.getAllSigValues(sig)) atoms.add(stripAtomSuffix(atom));
+            atoms.sort(NATURAL_ORDER);
+            atomsBySig.put(sig.name, atoms);
+        }
+
+        // Static field values, keyed by owning sig. A field of a one sig drops the owner column.
+        Map<String, JsonArray> fieldsBySig = new LinkedHashMap<>();
+        Map<String, String> firstByModule = new LinkedHashMap<>();
+        Map<String, Map<String, String>> nextByModule = new LinkedHashMap<>();
+        for (Qname field : instance.allFieldQnames()) {
+            Set<List<String>> tuples = normalizeTuples(instance.getAllFieldValues(field));
+            if (!isStaticDomainField(field, tuples)) continue;
+            if ("Ord".equals(field.sigParent)) {
+                for (List<String> t : tuples) {
+                    if ("First".equals(field.name)) {
+                        firstByModule.put(field.nameSpace, stripAtomSuffix(t.get(t.size() - 1)));
+                    } else if ("Next".equals(field.name) && t.size() >= 2) {
+                        nextByModule
+                                .computeIfAbsent(field.nameSpace, k -> new LinkedHashMap<>())
+                                .put(
+                                        stripAtomSuffix(t.get(t.size() - 2)),
+                                        stripAtomSuffix(t.get(t.size() - 1)));
+                    }
+                }
+                continue;
+            }
+            if (!"this".equals(field.nameSpace) || !isModelSig.test(field.sigParent)) continue;
+            List<String> owners = atomsBySig.getOrDefault(field.sigParent, List.of());
+            int skip = owners.size() == 1 ? 1 : 0;
+            List<String> values = new ArrayList<>();
+            for (List<String> t : tuples) {
+                StringBuilder value = new StringBuilder();
+                for (int i = Math.min(skip, t.size() - 1); i < t.size(); i++) {
+                    if (value.length() > 0) value.append("->");
+                    value.append(stripAtomSuffix(t.get(i)));
+                }
+                values.add(value.toString());
+            }
+            values.sort(NATURAL_ORDER);
+            JsonObject entry = new JsonObject();
+            entry.addProperty("name", field.name);
+            JsonArray valueArray = new JsonArray();
+            values.forEach(valueArray::add);
+            entry.add("values", valueArray);
+            fieldsBySig.computeIfAbsent(field.sigParent, k -> new JsonArray()).add(entry);
+        }
+
+        JsonArray sigs = new JsonArray();
+        for (String name : parents.keySet()) {
+            if (!isModelSig.test(name)) continue;
+            String parent = parents.get(name);
+            boolean enumMember =
+                    modifiers.get(name).contains("one") && parent != null && isModelSig.test(parent);
+            if (enumMember) continue;
+            JsonObject sig = new JsonObject();
+            sig.addProperty("name", name);
+            sig.addProperty("modifiers", modifiers.get(name));
+            if (parent != null) sig.addProperty("parent", parent);
+            if (currentSigScopes != null && currentSigScopes.containsKey(name)) {
+                sig.addProperty("scope", currentSigScopes.get(name));
+            }
+            JsonArray atoms = new JsonArray();
+            atomsBySig.getOrDefault(name, List.of()).forEach(atoms::add);
+            sig.add("atoms", atoms);
+            sig.add("fields", fieldsBySig.getOrDefault(name, new JsonArray()));
+            sigs.add(sig);
+        }
+        info.add("sigs", sigs);
+
+        // Each ordering as a chain from First along Next; its sig is whichever owns the atoms.
+        JsonArray orderings = new JsonArray();
+        for (Map.Entry<String, String> first : firstByModule.entrySet()) {
+            Map<String, String> next = nextByModule.getOrDefault(first.getKey(), Map.of());
+            JsonArray order = new JsonArray();
+            Set<String> seen = new java.util.HashSet<>();
+            for (String atom = first.getValue(); atom != null && seen.add(atom); atom = next.get(atom)) {
+                order.add(atom);
+            }
+            String owner = null;
+            for (Map.Entry<String, List<String>> sig : atomsBySig.entrySet()) {
+                if (sig.getValue().contains(first.getValue()) && !modifiers.get(sig.getKey()).contains("one")) {
+                    owner = sig.getKey();
+                }
+            }
+            JsonObject ordering = new JsonObject();
+            ordering.addProperty("module", first.getKey());
+            if (owner != null) ordering.addProperty("sig", owner);
+            ordering.add("order", order);
+            orderings.add(ordering);
+        }
+        info.add("orderings", orderings);
+        return info;
+    }
+
     /** "PID_0$0" → "PID_0" (kodkod atom names carry a $N suffix). */
     private static String stripAtomSuffix(String atom) {
         atom = normalizeInstanceAtom(atom);
@@ -1816,6 +1996,7 @@ public class CommandRouter {
         currentTerminal = false;
         extractedDomainPins = null;
         extractedDomainPinFragments = Collections.emptyList();
+        currentStaticInfo = null;
         lastSimulationModule = null;
     }
 

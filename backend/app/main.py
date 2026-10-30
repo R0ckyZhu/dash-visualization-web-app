@@ -475,6 +475,20 @@ async def get_generated(managed: ManagedSession = Depends(_active_session)):
             raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/api/static")
+async def get_static_info(managed: ManagedSession = Depends(_active_session)):
+    """Return the static part of the current trace: atoms, constants, orderings, Int range."""
+    async with managed.operation_lock:
+        session = managed.manager
+        if session is None:
+            raise HTTPException(status_code=404, detail="No model loaded")
+        try:
+            data = await session.static_info()
+            return _with_session_metadata(data, managed.id)
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/api/tables")
 async def get_tables(managed: ManagedSession = Depends(_active_session)):
     async with managed.operation_lock:

@@ -196,6 +196,7 @@ export function TraceTable({
     variable: true,
   });
   const [changedOnly, setChangedOnly] = useState(false);
+  const [highlightChanges, setHighlightChanges] = useState(false);
   const [hideAbsent, setHideAbsent] = useState(true);
   const [rawOpen, setRawOpen] = useState(false);
   const tableRef = useRef<HTMLDivElement | null>(null);
@@ -316,6 +317,14 @@ export function TraceTable({
         <label>
           <input
             type="checkbox"
+            checked={highlightChanges}
+            onChange={(e) => setHighlightChanges(e.target.checked)}
+          />
+          Highlight changes
+        </label>
+        <label>
+          <input
+            type="checkbox"
             checked={changedOnly}
             onChange={(e) => setChangedOnly(e.target.checked)}
           />
@@ -398,7 +407,7 @@ export function TraceTable({
                   {row.cells.map((cell, index) => {
                     const classes = [
                       index === currentTraceIndex ? "current-col" : "",
-                      row.changed[index] ? "changed" : "",
+                      highlightChanges && row.changed[index] ? "changed" : "",
                       isHit(row, index) ? "cell-hit" : "",
                       row.kind === "state" && row.present[index]
                         ? "present"
@@ -428,9 +437,10 @@ export function TraceTable({
         </table>
       </div>
       <p className="help trace-help">
-        Columns follow the current path through the Kripke structure. Changed
-        cells differ from the previous snapshot. Selecting a state, transition
-        or snapshot in any view highlights it here.
+        Columns follow the current path through the Kripke structure. With
+        Highlight changes on, cells that differ from the previous snapshot are
+        marked. Selecting a state, transition or snapshot in any view
+        highlights it here.
       </p>
       <details
         className="raw-details"

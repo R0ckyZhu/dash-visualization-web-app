@@ -61,6 +61,10 @@ class SessionManager:
         """The Alloy actually solved for the most recent init/step, plus its generated fragments."""
         return await self.bridge.send_command("generated")
 
+    async def static_info(self) -> dict:
+        """Sigs, static field values, orderings and integer range chosen by the last init."""
+        return await self.bridge.send_command("static")
+
     async def step(self, state: dict,
                    sig_scopes: Optional[Dict[str, int]] = None,
                    constraints: Optional[List[str]] = None,

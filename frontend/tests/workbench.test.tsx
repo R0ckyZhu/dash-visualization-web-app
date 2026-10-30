@@ -13,8 +13,17 @@ import { valuesChanged } from "../src/state/valueComparison";
 import { dashApi } from "../src/api/dashApi";
 
 vi.mock("../src/graph/StatechartGraph", () => ({
-  StatechartGraph: ({ activeStateIds }: { activeStateIds: string[] }) => (
-    <div data-testid="graph">{activeStateIds.join(",")}</div>
+  StatechartGraph: ({
+    activeStateIds,
+    children,
+  }: {
+    activeStateIds: string[];
+    children?: React.ReactNode;
+  }) => (
+    <div>
+      <div data-testid="graph">{activeStateIds.join(",")}</div>
+      {children}
+    </div>
   ),
 }));
 vi.mock("../src/graph/KripkeGraph", () => ({
@@ -30,6 +39,7 @@ vi.mock("../src/api/dashApi", () => ({
     nextSolution: vi.fn(),
     altTrans: vi.fn(),
     source: vi.fn(),
+    staticInfo: vi.fn(),
   },
 }));
 const meta = { sessionId: "default", sessionRevision: 1 };
@@ -45,7 +55,9 @@ const model = {
   })),
   transitions: [{ id: "Light/Toggle", from: "Light/On", to: "Light/Off" }],
   events: [],
-  vars: [],
+  vars: [
+    { id: "Light/value", kind: "INT", multiplicity: "one", type: "Int", params: [] },
+  ],
   buffers: [],
 };
 const first = {
@@ -81,6 +93,30 @@ beforeEach(() => {
     ...meta,
     satisfiable: true,
     snapshots: [first, second],
+  });
+  vi.mocked(dashApi.staticInfo).mockResolvedValue({
+    ...meta,
+    available: true,
+    integers: { min: -8, max: 7, seqLength: 4 },
+    modules: ["util/ordering [Floor]"],
+    sigs: [
+      {
+        name: "Floor",
+        modifiers: "",
+        scope: 3,
+        atoms: ["Floor_0", "Floor_1", "Floor_2"],
+        fields: [],
+      },
+      {
+        name: "Const",
+        modifiers: "one",
+        atoms: ["Const"],
+        fields: [{ name: "limit", values: ["7"] }],
+      },
+    ],
+    orderings: [
+      { module: "ordering", sig: "Floor", order: ["Floor_2", "Floor_0", "Floor_1"] },
+    ],
   });
 });
 async function openAndStart() {
@@ -294,6 +330,68 @@ describe("simulation request integrity", () => {
       mode: "simplified",
       sigScopes: { PID: 3 },
     });
+  });
+});
+describe("static and dynamic panels", () => {
+  it("shows the solver's static choices in the hierarchy view on request", async () => {
+    const user = await openAndStart();
+    expect(screen.queryByLabelText("Static model info")).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Show static model info" }),
+    );
+    const info = await screen.findByLabelText("Static model info");
+    await waitFor(() =>
+      expect(within(info).getByText("Floor_2 < Floor_0 < Floor_1")).toBeTruthy(),
+    );
+    expect(within(info).getByText("Int -8 … 7 (4-bit)")).toBeTruthy();
+    expect(within(info).getByText("Const.limit = 7")).toBeTruthy();
+  });
+  it("keeps transition definitions out of the snapshot info", async () => {
+    const { user, region } = await stepAndOpenTrace();
+    const takenRow = within(region).getByText("Transition taken").closest("tr")!;
+    await user.click(takenRow.querySelectorAll("td")[1]);
+    const kripke = screen.getByRole("complementary", {
+      name: "Explored Kripke structure",
+    });
+    expect(within(kripke).getByText("Snapshot S2")).toBeTruthy();
+    expect(within(kripke).queryByText("Guard")).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Static Model Hierarchy" }),
+    );
+    const details = screen.getByRole("complementary", { name: "Model details" });
+    const definition = within(details)
+      .getByRole("heading", { name: "Transition" })
+      .closest("section")!;
+    expect(within(definition).getByText("Light/Toggle")).toBeTruthy();
+  });
+  it("overlays the current snapshot's variables on the Kripke panel", async () => {
+    const user = await openAndStart();
+    await user.click(screen.getByRole("button", { name: "Step →" }));
+    await screen.findByText("Stepped to S2.");
+    expect(screen.queryByLabelText("S2 overlay")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Show variables" }));
+    const overlay = screen.getByLabelText("S2 overlay");
+    expect(within(overlay).getByText("value")).toBeTruthy();
+    expect(within(overlay).getByText("1")).toBeTruthy();
+  });
+  it("marks changed cells only when highlighting is enabled", async () => {
+    const { user, region } = await stepAndOpenTrace();
+    const valueRow = within(region).getByText("value").closest("tr")!;
+    expect(valueRow.querySelectorAll("td.changed")).toHaveLength(0);
+    await user.click(screen.getByRole("checkbox", { name: "Highlight changes" }));
+    expect(valueRow.querySelectorAll("td.changed")).toHaveLength(1);
+  });
+  it("shows model source without the read-only caption", async () => {
+    vi.mocked(dashApi.source).mockResolvedValue({
+      ...meta,
+      dsh: "state Light {}",
+      als: "sig Light {}",
+      file: "test.dsh",
+    });
+    const user = await openAndStart();
+    await user.click(screen.getByRole("button", { name: "Model Source" }));
+    await screen.findByText("state Light {}");
+    expect(screen.queryByText("Read-only model source")).toBeNull();
   });
 });
 describe("relation comparison", () => {

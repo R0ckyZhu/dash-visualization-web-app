@@ -104,6 +104,25 @@ export interface StepRequest extends InitRequest {
   excludeTransitions?: string[];
 }
 
+export interface StaticSig {
+  name: string;
+  /** Declaration keywords such as "one" or "abstract"; empty for a plain sig. */
+  modifiers: string;
+  parent?: string;
+  scope?: number;
+  atoms: string[];
+  fields: Array<{ name: string; values: string[] }>;
+}
+
+/** What the solver fixed for the whole trace when it found the initial snapshot. */
+export interface StaticInfoResponse extends SessionResponseMeta {
+  available: boolean;
+  integers?: { min: number; max: number; seqLength: number };
+  modules?: string[];
+  sigs?: StaticSig[];
+  orderings?: Array<{ module: string; sig?: string; order: string[] }>;
+}
+
 export interface GeneratedResponse extends SessionResponseMeta {
   available: boolean;
   alloyCode?: string;

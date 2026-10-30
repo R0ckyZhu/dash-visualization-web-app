@@ -13,18 +13,17 @@ import type {
   InspectResponse,
   SolutionResponse,
   SourceResponse,
+  StaticInfoResponse,
 } from "./api/types";
 import { Modal } from "./components/Modal";
 import { ModelLibrary } from "./components/ModelLibrary";
 import { ExplorePanel } from "./components/ExplorePanel";
+import { HierarchyInspector } from "./components/HierarchyInspector";
 import { TraceTable } from "./components/TraceTable";
 import { type DetailSelection } from "./components/SelectionDetails";
 import { ScopeDialog } from "./components/ScopeDialog";
 import { SplitButton } from "./components/SplitButton";
-import {
-  StatechartGraph,
-  type StatechartOverlayMode,
-} from "./graph/StatechartGraph";
+import { StatechartGraph } from "./graph/StatechartGraph";
 import { expandParameterizedModel } from "./state/modelExpansion";
 import {
   createInitialStateTree,
@@ -96,8 +95,10 @@ export function App() {
   const [status, setStatus] = useState("Open a Dash+ model to begin.");
   const [busy, setBusy] = useState(false);
   const [detailSelection, setDetailSelection] = useState<DetailSelection>(null);
-  const [statechartOverlay, setStatechartOverlay] =
-    useState<StatechartOverlayMode>(null);
+  const [showStaticInfo, setShowStaticInfo] = useState(false);
+  const [staticInfo, setStaticInfo] = useState<StaticInfoResponse | null>(
+    null,
+  );
 
   useEffect(() => {
     dashApi
@@ -119,6 +120,10 @@ export function App() {
   );
   const currentSnapshot = trace[currentTraceIndex] ?? null;
   const currentTreeNodeId = traceNodeIds[currentTraceIndex] ?? null;
+  const staticSelection =
+    detailSelection?.kind === "state" || detailSelection?.kind === "transition"
+      ? detailSelection
+      : null;
 
   useEffect(() => {
     setDetailSelection(null);
@@ -153,6 +158,14 @@ export function App() {
     setScopeDialogOpen(false);
     setSigScopes(nextScopes);
     void simulate(nextScopes);
+  }
+
+  /** The static part (atoms, orderings, constants) is fixed by each initial solve. */
+  function refreshStaticInfo() {
+    dashApi
+      .staticInfo()
+      .then(setStaticInfo)
+      .catch(() => setStaticInfo(null));
   }
 
   function installInitialSolution(
@@ -218,6 +231,7 @@ export function App() {
     setScopeDialogOpen(false);
     setView("hierarchy");
     setSource(null);
+    setStaticInfo(null);
     resetRunState();
 
     await runBusy(`Loading ${path}...`, async () => {
@@ -251,7 +265,9 @@ export function App() {
     await runBusy("Finding an initial snapshot...", async () => {
       resetRunState();
       const initial = await dashApi.init({ mode: MODE, sigScopes: scopes });
+      setStaticInfo(null);
       if (installInitialSolution(initial, solveModel)) {
+        refreshStaticInfo();
         setStatus("Initial snapshot S1 found.");
       } else {
         setHasError(true);
@@ -449,6 +465,7 @@ export function App() {
     await runBusy("Finding an alternative initial snapshot...", async () => {
       const alternate = await dashApi.nextInitSolution();
       if (installInitialSolution(alternate, visualModel)) {
+        refreshStaticInfo();
         setDetailSelection(null);
         setStatus("Alternative initial snapshot selected.");
       } else {
@@ -685,22 +702,35 @@ export function App() {
                     transitions
                   </span>
                 </div>
-                <StatechartGraph
-                  model={visualModel ?? session.model}
-                  activeStateIds={currentSnapshot?.activeStates ?? []}
-                  currentSnapshotRaw={currentSnapshot?.raw ?? null}
-                  hasSnapshot={!!currentSnapshot}
-                  onOverlayModeChange={setStatechartOverlay}
-                  overlayMode={statechartOverlay}
-                  onSelectionChange={setDetailSelection}
-                  selection={
-                    detailSelection?.kind === "state" ||
-                    detailSelection?.kind === "transition"
-                      ? detailSelection
-                      : null
-                  }
-                  takenTransitionIds={currentSnapshot?.takenTransitions ?? []}
-                />
+                <div className="hierarchy-body">
+                  <StatechartGraph
+                    model={visualModel ?? session.model}
+                    activeStateIds={currentSnapshot?.activeStates ?? []}
+                    hasSnapshot={!!currentSnapshot}
+                    onSelectionChange={setDetailSelection}
+                    selection={staticSelection}
+                    takenTransitionIds={currentSnapshot?.takenTransitions ?? []}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={showStaticInfo}
+                      className={showStaticInfo ? "toggle-on" : ""}
+                      onClick={() => setShowStaticInfo(!showStaticInfo)}
+                    >
+                      {showStaticInfo
+                        ? "Hide static model info"
+                        : "Show static model info"}
+                    </button>
+                  </StatechartGraph>
+                  <HierarchyInspector
+                    model={visualModel ?? session.model}
+                    onSelection={setDetailSelection}
+                          scopes={sigScopes}
+                    selection={staticSelection}
+                    showStatic={showStaticInfo}
+                    staticInfo={staticInfo}
+                  />
+                </div>
                 <div className="graph-legend">
                   <span>
                     <i className="legend-active" /> Active
@@ -776,7 +806,6 @@ export function App() {
               pathNodeIds={traceNodeIds}
               selection={detailSelection}
               edgeLabel={edgeLabel}
-              onSelection={setDetailSelection}
               onSelectNode={selectNode}
               onSelectTransition={(transitionId, targetNodeId) => {
                 if (operationLock.current) return;
@@ -828,7 +857,6 @@ function SourceView({ source }: { source: SourceResponse | null }) {
   return (
     <div className="source-shell">
       <div className="source-tools">
-        <span>Read-only model source</span>
         <div className="source-switch">
           <button aria-pressed={tab === "dsh"} onClick={() => setTab("dsh")}>
             Dash+

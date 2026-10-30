@@ -1,12 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import cytoscape, { type Core, type ElementDefinition, type NodeSingular } from "cytoscape";
-import type { DashEvent, DashModel, DashState, DashTransition, DashVar } from "../api/types";
-import {
-  activeEventSets,
-  formatSnapshotValues,
-  normalizeSnapshotAtom,
-  snapshotVariableValues
-} from "../state/snapshotData";
+import type { DashModel, DashState, DashTransition } from "../api/types";
 
 const ZOOM_STEP = 1.5;
 const ZOOM_HOLD_STEP = 1.12;
@@ -24,27 +18,6 @@ const PARALLEL_LABEL_GAP = 24;
 export type StatechartSelection =
   | { kind: "state"; value: DashState }
   | { kind: "transition"; value: DashTransition };
-export type StatechartOverlayMode = "events" | "variables" | null;
-
-interface EventOverlayGroup {
-  id: string;
-  left: number;
-  top: number;
-  maxWidth: number;
-  maxHeight: number;
-  events: Array<{ event: DashEvent; active: boolean }>;
-}
-
-interface VariableOverlayGroup {
-  id: string;
-  label: string;
-  left: number;
-  top: number;
-  maxWidth: number;
-  maxHeight: number;
-  variables: Array<{ variable: DashVar; value: string }>;
-}
-
 function shortName(id: string) {
   return id.split("/").pop() ?? id;
 }
@@ -134,13 +107,7 @@ function sortNodes(nodes: NodeSingular[]) {
   );
 }
 
-function deterministicLayout(cy: Core, overlayRows: Map<string, number> = new Map()) {
-  function reservedHeight(node: NodeSingular) {
-    const fullData = node.data("fullData") as DashState | undefined;
-    const ownerId = fullData?._originalId ?? node.id();
-    return (overlayRows.get(ownerId) ?? 0) * 24;
-  }
-
+function deterministicLayout(cy: Core) {
   function layoutNode(node: NodeSingular, originX: number, originY: number) {
     const children = node.children().toArray();
     if (children.length === 0) {
@@ -160,7 +127,7 @@ function deterministicLayout(cy: Core, overlayRows: Map<string, number> = new Ma
     const defaults = leaves.filter((leaf) => leaf.hasClass("default-state"));
     const nonDefaults = leaves.filter((leaf) => !leaf.hasClass("default-state"));
     const innerX = originX + COMPOUND_PADDING;
-    let cursorY = originY + COMPOUND_PADDING + 20 + reservedHeight(node);
+    let cursorY = originY + COMPOUND_PADDING + 20;
     let maxWidth = 0;
 
     if (defaults.length > 0) {
@@ -238,74 +205,29 @@ function deterministicLayout(cy: Core, overlayRows: Map<string, number> = new Ma
   });
 }
 
-/** Where the deterministic layout last placed each leaf, so manual drags can be
-    measured as an offset from it and re-applied after a re-layout. */
-function captureLayoutPositions(cy: Core) {
-  const positions = new Map<string, { x: number; y: number }>();
-  cy.nodes().forEach((node) => {
-    if (node.isParent()) return;
-    const position = node.position();
-    positions.set(node.id(), { x: position.x, y: position.y });
-  });
-  return positions;
-}
-
-function overlayRowsFor(model: DashModel, mode: "events" | "variables" | null) {
-  const rows = new Map<string, number>();
-  const items = mode === "events" ? model.events : mode === "variables" ? model.vars : [];
-  for (const item of items) {
-    const ownerId = item.id.split("/").slice(0, -1).join("/");
-    rows.set(ownerId, (rows.get(ownerId) ?? 0) + 1);
-  }
-  if (mode === "variables") {
-    rows.forEach((count, ownerId) => rows.set(ownerId, Math.ceil(count / 2)));
-  }
-  return rows;
-}
-
-function applyOverlayPadding(cy: Core, overlayRows: Map<string, number>) {
-  cy.nodes().forEach((node) => {
-    if (!node.hasClass("compound-and") && !node.hasClass("compound-or")) return;
-    const fullData = node.data("fullData") as DashState | undefined;
-    const ownerId = fullData?._originalId ?? node.id();
-    const rows = node.isParent() ? (overlayRows.get(ownerId) ?? 0) : 0;
-    node.style("padding", `${20 + rows * 24}px`);
-  });
-}
-
 export function StatechartGraph({
   activeStateIds,
-  currentSnapshotRaw,
+  children,
   hasSnapshot,
   model,
-  onOverlayModeChange,
   onSelectionChange,
-  overlayMode,
   selection,
   takenTransitionIds
 }: {
   activeStateIds: string[];
-  currentSnapshotRaw: Record<string, unknown> | null;
+  /** Extra controls placed at the end of the graph toolbar. */
+  children?: ReactNode;
   hasSnapshot: boolean;
   model: DashModel;
-  onOverlayModeChange: (mode: StatechartOverlayMode) => void;
   onSelectionChange: (selection: StatechartSelection | null) => void;
-  overlayMode: StatechartOverlayMode;
   selection: StatechartSelection | null;
   takenTransitionIds: string[];
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
-  const overlayFrameRef = useRef<number | null>(null);
   const zoomHoldRef = useRef<{ delay: number; repeat: number | null } | null>(null);
   const pointerZoomRef = useRef(false);
-  const layoutPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const renderOverlaysRef = useRef<() => void>(() => undefined);
   const onSelectionChangeRef = useRef(onSelectionChange);
-  const [eventOverlayGroups, setEventOverlayGroups] = useState<EventOverlayGroup[]>([]);
-  const [variableOverlayGroups, setVariableOverlayGroups] = useState<VariableOverlayGroup[]>([]);
-  const eventsVisible = overlayMode === "events";
-  const variablesVisible = overlayMode === "variables";
 
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
@@ -320,99 +242,6 @@ export function StatechartGraph({
     };
   }, []);
 
-  renderOverlaysRef.current = () => {
-    const cy = cyRef.current;
-    if (!cy) {
-      setEventOverlayGroups([]);
-      setVariableOverlayGroups([]);
-      return;
-    }
-
-    if (eventsVisible) {
-      const { bare, tuples } = activeEventSets(currentSnapshotRaw);
-      const groups = new Map<string, EventOverlayGroup>();
-      for (const event of model.events) {
-        const ownerId = event.id.split("/").slice(0, -1).join("/");
-        const atom = normalizeSnapshotAtom(event.id.replace(/\//g, "_"));
-        const parameterized = (event.params?.length ?? 0) > 0;
-        const targets = cy.nodes().filter((node) => {
-          const fullData = node.data("fullData") as DashState | undefined;
-          return node.id() === ownerId || fullData?._originalId === ownerId;
-        });
-
-        targets.forEach((node) => {
-          const fullData = node.data("fullData") as DashState | undefined;
-          const instance = fullData?._paramInstance;
-          const active = parameterized
-            ? instance != null && tuples.has(`${normalizeSnapshotAtom(instance)}->${atom}`)
-            : bare.has(atom);
-          const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
-          const inset = 7;
-          const id = node.id();
-          const group = groups.get(id) ?? {
-            id,
-            left: box.x1 + inset,
-            top: box.y1 + inset,
-            maxWidth: Math.max(0, box.w - inset * 2),
-            maxHeight: Math.max(0, box.h - inset * 2),
-            events: []
-          };
-          group.events.push({ event, active });
-          groups.set(id, group);
-        });
-      }
-      setEventOverlayGroups([...groups.values()]);
-    } else {
-      setEventOverlayGroups([]);
-    }
-
-    if (variablesVisible) {
-      const groups = new Map<string, VariableOverlayGroup>();
-      for (const variable of model.vars) {
-        const ownerId = variable.id.split("/").slice(0, -1).join("/");
-        const parameterized = (variable.params?.length ?? 0) > 0;
-        const targets = cy.nodes().filter((node) => {
-          const fullData = node.data("fullData") as DashState | undefined;
-          return node.id() === ownerId || fullData?._originalId === ownerId;
-        });
-
-        targets.forEach((node) => {
-          const fullData = node.data("fullData") as DashState | undefined;
-          const instance = parameterized ? fullData?._paramInstance : undefined;
-          const values = snapshotVariableValues(currentSnapshotRaw, variable.id, instance);
-          const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
-          const inset = 7;
-          const id = node.id();
-          const group = groups.get(id) ?? {
-            id,
-            label: node.data("label") || id,
-            left: box.x1 + inset,
-            top: box.y1 + inset,
-            maxWidth: Math.max(0, box.w - inset * 2),
-            maxHeight: Math.max(0, box.h - inset * 2),
-            variables: [] as VariableOverlayGroup["variables"]
-          };
-          group.variables.push({
-            variable,
-            value: currentSnapshotRaw ? formatSnapshotValues(values) : "—"
-          });
-          groups.set(id, group);
-        });
-      }
-      setVariableOverlayGroups([...groups.values()]);
-    } else {
-      setVariableOverlayGroups([]);
-    }
-  };
-
-  function scheduleEventOverlay() {
-    if (overlayFrameRef.current != null) return;
-    overlayFrameRef.current = requestAnimationFrame(() => {
-      overlayFrameRef.current = null;
-      renderOverlaysRef.current();
-    });
-  }
-
   function fitGraph() {
     cyRef.current?.fit(undefined, 30);
   }
@@ -426,40 +255,6 @@ export function StatechartGraph({
       level: cy.zoom() * factor,
       renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
     });
-  }
-
-  /**
-   * Overlay chips need reserved height inside each compound, so toggling them has
-   * to re-run the layout. Keep the user's work across it: remember pan and zoom,
-   * and re-apply however far each node was dragged from its last laid-out spot.
-   */
-  function relayoutPreservingView(cy: Core, overlayRows: Map<string, number>) {
-    const pan = { ...cy.pan() };
-    const zoom = cy.zoom();
-    const drags = new Map<string, { dx: number; dy: number }>();
-
-    cy.nodes().forEach((node) => {
-      if (node.isParent()) return;
-      const previous = layoutPositionsRef.current.get(node.id());
-      if (!previous) return;
-      const current = node.position();
-      const dx = current.x - previous.x;
-      const dy = current.y - previous.y;
-      if (dx !== 0 || dy !== 0) drags.set(node.id(), { dx, dy });
-    });
-
-    deterministicLayout(cy, overlayRows);
-    layoutPositionsRef.current = captureLayoutPositions(cy);
-
-    cy.nodes().forEach((node) => {
-      const drag = drags.get(node.id());
-      if (!drag) return;
-      const position = node.position();
-      node.position({ x: position.x + drag.dx, y: position.y + drag.dy });
-    });
-
-    cy.zoom(zoom);
-    cy.pan(pan);
   }
 
   function stopZoomHold() {
@@ -507,8 +302,6 @@ export function StatechartGraph({
 
   useEffect(() => {
     if (!containerRef.current) return;
-    setEventOverlayGroups([]);
-    setVariableOverlayGroups([]);
 
     const cy = cytoscape({
       container: containerRef.current,
@@ -641,7 +434,6 @@ export function StatechartGraph({
       edge.style("text-margin-y", edge.data("labelMarginY") as number);
     });
     deterministicLayout(cy);
-    layoutPositionsRef.current = captureLayoutPositions(cy);
     cy.fit(undefined, 30);
 
     cy.on("tap", "node", (event) => {
@@ -690,39 +482,15 @@ export function StatechartGraph({
       if (x !== position.x || y !== position.y) node.position({ x, y });
     });
 
-    cy.on("pan zoom resize", scheduleEventOverlay);
-    cy.on("drag free", "node", scheduleEventOverlay);
-
-    const observer = new ResizeObserver(() => {
-      cy.resize();
-      scheduleEventOverlay();
-    });
+    const observer = new ResizeObserver(() => cy.resize());
     observer.observe(containerRef.current);
     cyRef.current = cy;
     return () => {
       observer.disconnect();
-      if (overlayFrameRef.current != null) {
-        cancelAnimationFrame(overlayFrameRef.current);
-        overlayFrameRef.current = null;
-      }
       cy.destroy();
       cyRef.current = null;
     };
   }, [model]);
-
-  useEffect(() => {
-    scheduleEventOverlay();
-  }, [currentSnapshotRaw, eventsVisible, model, variablesVisible]);
-
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    const mode = variablesVisible ? "variables" : eventsVisible ? "events" : null;
-    const overlayRows = overlayRowsFor(model, mode);
-    applyOverlayPadding(cy, overlayRows);
-    relayoutPreservingView(cy, overlayRows);
-    scheduleEventOverlay();
-  }, [eventsVisible, model, variablesVisible]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -785,76 +553,11 @@ export function StatechartGraph({
         >
           -
         </button>
-        <button onClick={exportGraph} title="Exports the graph; event and variable HTML overlays are excluded" type="button">Export PNG</button>
-        <div className="overlay-controls" aria-label="Statechart data overlays">
-          <button
-            className={eventsVisible ? "toggle-on" : ""}
-            disabled={model.events.length === 0}
-            onClick={() => onOverlayModeChange(eventsVisible ? null : "events")}
-            type="button"
-          >
-            {eventsVisible ? "Hide events" : "Show events"}
-          </button>
-          <button
-            className={variablesVisible ? "toggle-on" : ""}
-            disabled={model.vars.length === 0}
-            onClick={() => onOverlayModeChange(variablesVisible ? null : "variables")}
-            type="button"
-          >
-            {variablesVisible ? "Hide variables" : "Show variables"}
-          </button>
-        </div>
+        <button onClick={exportGraph} title="Export the statechart as an image" type="button">Export PNG</button>
+        {children && <div className="graph-controls-end">{children}</div>}
       </div>
       <div className="statechart-graph-shell">
         <div className="statechart-canvas" ref={containerRef} />
-        <div className="event-overlay">
-          {eventOverlayGroups.map((group) => (
-            <div
-              className="event-group"
-              key={group.id}
-              style={{
-                left: group.left,
-                top: group.top,
-                maxHeight: group.maxHeight,
-                maxWidth: group.maxWidth
-              }}
-            >
-              {group.events.map(({ event, active }) => (
-                <div className={`event-chip ${active ? "active" : "inactive"}`} key={event.id} title={event.id}>
-                  <span className="event-dot" />
-                  <span>{shortName(event.id)}</span>
-                  <small>{event.kind}</small>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-        <div className="variable-overlay">
-          {variableOverlayGroups.map((group) => (
-            <div
-              aria-label={`${group.label} variables`}
-              className="variable-group"
-              key={group.id}
-              style={{
-                left: group.left,
-                top: group.top,
-                maxHeight: group.maxHeight,
-                maxWidth: group.maxWidth
-              }}
-            >
-              {group.variables.map(({ variable, value }) => (
-                <div
-                  className="variable-chip"
-                  key={variable.id}
-                  title={`${variable.id} = ${value} (${variable.type ?? "?"})`}
-                >
-                  <span className="variable-name">{shortName(variable.id)}</span>
-                  <span className="variable-value">{value}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
