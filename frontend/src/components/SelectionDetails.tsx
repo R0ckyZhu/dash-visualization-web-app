@@ -54,7 +54,7 @@ export function ModelElementDetails({
       {selection.kind === "state" ? (
         <dl>
           <DetailRow label="Name">{selection.value.id}</DetailRow>
-          <DetailRow label="Kind">{selection.value.kind}</DetailRow>
+          <DetailRow label="Type">{selection.value.kind}</DetailRow>
           <DetailRow label="Parent">
             {selection.value.parent ?? "none"}
           </DetailRow>
