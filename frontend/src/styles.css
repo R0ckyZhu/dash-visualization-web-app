@@ -1537,8 +1537,6 @@ pre { font-size: 13px; line-height: 1.65; }
 .welcome-intro { margin-bottom: 40px; }
 .welcome-intro h1 { font-size: clamp(32px, 4vw, 48px); line-height: 1.15; font-weight: 600; letter-spacing: -.045em; margin: 14px 0 18px; }
 .welcome-intro > p:not(.eyebrow) { font-size: 16px; line-height: 1.7; color: var(--text-secondary); }
-.workflow-hint { display: flex; flex-wrap: wrap; gap: 28px; color: #7ca6c5; font: 12px Consolas, monospace; margin-top: 28px; }
-.workflow-hint b { color: #c3d1df; font: 13px system-ui; margin-left: 8px; }
 .path-form { padding: 20px; background: #17212c; border: 1px solid #2c3e50; border-radius: 10px; margin-bottom: 32px; }
 .path-form label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
 .input-action { display: flex; gap: 10px; }
@@ -1668,7 +1666,6 @@ pre { font-size: 13px; line-height: 1.65; }
 @media (max-width: 600px) {
   .welcome { padding: 28px 20px; }
   .welcome-intro { margin-bottom: 28px; }
-  .workflow-hint { gap: 12px; flex-direction: column; }
   .library-heading { align-items: stretch; flex-direction: column; }
   .library-heading input { width: 100%; }
   .input-action { flex-direction: column; }

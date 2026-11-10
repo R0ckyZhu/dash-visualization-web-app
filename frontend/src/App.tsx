@@ -547,9 +547,7 @@ export function App() {
           <span className="brand-symbol" aria-hidden="true">
             ◇
           </span>
-          <div className="wordmark">
-            Dash+<span> Visualizer</span>
-          </div>
+          <div className="wordmark">DashViz</div>
         </div>
         {session && (
           <div className="model-identity" title={session.filePath}>
@@ -678,17 +676,6 @@ export function App() {
               Open a Dash+ model, follow its transitions, and see
               <br className="desktop-break" /> what changes at every step.
             </p>
-            <div className="workflow-hint">
-              <span>
-                01 <b>Open a Dash+ model</b>
-              </span>
-              <span>
-                02 <b>Start a simulation</b>
-              </span>
-              <span>
-                03 <b>Explore snapshots</b>
-              </span>
-            </div>
           </div>
           <ModelLibrary
             examples={examples}
