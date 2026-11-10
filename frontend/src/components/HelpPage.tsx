@@ -7,7 +7,7 @@ const sections = [
   { id: "help-controls", title: "Simulation controls" },
   { id: "help-views", title: "Views" },
   { id: "help-concepts", title: "Concepts" },
-  { id: "help-tips", title: "Tips and limitations" },
+  { id: "help-tips", title: "Tips" },
 ];
 
 export function HelpPage({ onClose }: { onClose: () => void }) {
@@ -97,19 +97,12 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
             <dd>Every state and region of the statechart exists exactly once.</dd>
             <dt>Parameterized models</dt>
             <dd>
-              Some regions are declared over a signature, for example{" "}
-              <code>conc Elevator [PID]</code>. The model contains one copy of
-              that region for each atom of the signature, shown in the
+              Models that contain parameterized processes, shown in the
               statechart as <code>Elevator[PID_0]</code>,{" "}
               <code>Elevator[PID_1]</code> and so on. The card names the
               signature, such as “per PID”.
             </dd>
           </dl>
-          <p>
-            Three published case studies (nasa-fgs-mode-logic, railway and
-            carousel) are not listed because the current Dash+ toolchain cannot
-            load them.
-          </p>
         </section>
 
         <section id="help-scopes">
@@ -316,16 +309,11 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
         </section>
 
         <section id="help-tips">
-          <h2>Tips and limitations</h2>
+          <h2>Tips</h2>
           <ul>
             <li>
               “No initial snapshot exists with these scopes” usually means the
               model needs different scopes; open <b>Scopes</b> and try again.
-            </li>
-            <li>
-              Nothing is saved: reloading the page loses the current
-              simulation, and on the hosted site a session ends after 30
-              minutes without activity.
             </li>
             <li>
               Tabs in the same browser share one session. Use another browser
