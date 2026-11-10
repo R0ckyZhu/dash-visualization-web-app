@@ -9,6 +9,8 @@ export interface ExampleModel {
   group: string;
   name: string;
   path: string;
+  /** Sigs the model's parameterized regions range over; empty when it has none. */
+  params?: string[];
 }
 
 export interface DashParam {

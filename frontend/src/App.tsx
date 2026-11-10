@@ -18,6 +18,7 @@ import type {
 import { Modal } from "./components/Modal";
 import { ModelLibrary } from "./components/ModelLibrary";
 import { ExplorePanel } from "./components/ExplorePanel";
+import { HelpPage } from "./components/HelpPage";
 import { HierarchyInspector } from "./components/HierarchyInspector";
 import { TraceTable } from "./components/TraceTable";
 import { type DetailSelection } from "./components/SelectionDetails";
@@ -72,6 +73,8 @@ export function App() {
   const [examples, setExamples] = useState<ExampleModel[]>([]);
   const [allowLocalModelPaths, setAllowLocalModelPaths] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const closeHelp = useCallback(() => setHelpOpen(false), []);
   const [panelWidth, setPanelWidth] = useState(420);
   const [hasError, setHasError] = useState(false);
   const operationLock = useRef(false);
@@ -228,6 +231,7 @@ export function App() {
 
     setSession(null);
     setOpenDialog(false);
+    setHelpOpen(false);
     setScopeDialogOpen(false);
     setView("hierarchy");
     setSource(null);
@@ -529,6 +533,7 @@ export function App() {
   }
 
   async function chooseView(nextView: ViewName) {
+    setHelpOpen(false);
     setView(nextView);
     if (nextView === "source") {
       await loadSource();
@@ -557,8 +562,8 @@ export function App() {
             <button
               key={name}
               disabled={!session || busy}
-              aria-current={view === name ? "page" : undefined}
-              className={view === name ? "active" : ""}
+              aria-current={view === name && !helpOpen ? "page" : undefined}
+              className={view === name && !helpOpen ? "active" : ""}
               onClick={() => void chooseView(name)}
             >
               {viewLabels[name]}
@@ -566,12 +571,19 @@ export function App() {
           ))}
         </nav>
         <div className="header-actions">
+          <button
+            aria-pressed={helpOpen}
+            className={helpOpen ? "active" : ""}
+            onClick={() => setHelpOpen(!helpOpen)}
+          >
+            Help
+          </button>
           <button disabled={busy} onClick={() => setOpenDialog(true)}>
             Open Dash+ model
           </button>
         </div>
       </header>
-      {session && (
+      {session && !helpOpen && (
         <div className="command-bar" aria-label="Simulation commands">
           <div className="command-group">
             <button
@@ -655,7 +667,9 @@ export function App() {
           </span>
         </div>
       )}
-      {!session ? (
+      {helpOpen ? (
+        <HelpPage onClose={closeHelp} />
+      ) : !session ? (
         <section className="welcome">
           <div className="welcome-intro">
             <p className="eyebrow">DASH+ MODEL WORKSPACE</p>

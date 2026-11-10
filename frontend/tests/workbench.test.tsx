@@ -75,7 +75,15 @@ const second = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(dashApi.examples).mockResolvedValue({
-    examples: [{ name: "Test light", path: "test.dsh", group: "Examples" }],
+    examples: [
+      { name: "Test light", path: "test.dsh", group: "Examples", params: [] },
+      {
+        name: "Test lift",
+        path: "lift.dsh",
+        group: "Examples",
+        params: ["PID"],
+      },
+    ],
     allowLocalModelPaths: true,
   });
   vi.mocked(dashApi.inspect).mockResolvedValue({
@@ -405,6 +413,32 @@ describe("static and dynamic panels", () => {
     await user.click(screen.getByRole("button", { name: "Model Source" }));
     await screen.findByText("state Light {}");
     expect(screen.queryByText("Read-only model source")).toBeNull();
+  });
+});
+describe("library and help", () => {
+  it("separates parameterized models from non-parameterized ones", async () => {
+    render(<App />);
+    const plain = await screen.findByRole("region", {
+      name: "Non-parameterized models",
+    });
+    const parameterized = screen.getByRole("region", {
+      name: "Parameterized models",
+    });
+    expect(within(plain).getByText("Test light")).toBeTruthy();
+    expect(within(plain).queryByText("Test lift")).toBeNull();
+    expect(within(parameterized).getByText("Test lift")).toBeTruthy();
+    expect(within(parameterized).getByText(/per PID/)).toBeTruthy();
+  });
+  it("opens help over a running simulation and returns to it", async () => {
+    const user = await openAndStart();
+    await user.click(screen.getByRole("button", { name: "Help" }));
+    expect(
+      screen.getByRole("heading", { name: "Using the Dash+ Visualizer" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Step →" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Close help" }));
+    expect(screen.getByText("S1 · Stable")).toBeTruthy();
+    expect(screen.getByTestId("graph").textContent).toBe("Light/On");
   });
 });
 describe("relation comparison", () => {

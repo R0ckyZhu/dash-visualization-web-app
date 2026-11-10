@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -189,6 +190,17 @@ def _read_dsh_source(file_path: str) -> str | None:
         return None
 
 
+# A parameterized region is declared `conc Name [Sig] { ... }` (or `state Name [Sig]`):
+# one copy of the region per atom of Sig.
+_PARAMETERIZED_REGION = re.compile(r"^\s*(?:conc|state)\s+\w+\s*\[\s*(\w+)\s*\]", re.M)
+
+
+def _region_params(file_path: Path) -> list[str]:
+    """The sigs a model's parameterized regions range over, without parsing the model."""
+    source = _read_dsh_source(str(file_path)) or ""
+    return sorted(set(_PARAMETERIZED_REGION.findall(source)))
+
+
 def _with_session_metadata(data: dict, session_id: str) -> dict:
     return context_store.attach_metadata(data, session_id)
 
@@ -248,6 +260,7 @@ async def list_examples():
                 "group": _GROUP_LABELS.get(group, group),
                 "name": name,
                 "path": str(dsh),
+                "params": _region_params(dsh),
             }
         )
     return {

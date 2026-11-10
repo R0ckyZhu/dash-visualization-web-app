@@ -16,10 +16,25 @@ export function ModelLibrary({
   const filtered = useMemo(
     () =>
       examples.filter((e) =>
-        `${e.name} ${e.group}`.toLowerCase().includes(query.toLowerCase()),
+        `${e.name} ${e.group} ${(e.params ?? []).join(" ")}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
       ),
     [examples, query],
   );
+  const librarySections = [
+    {
+      title: "Non-parameterized models",
+      description: "Each state and region exists exactly once.",
+      models: filtered.filter((e) => !e.params?.length),
+    },
+    {
+      title: "Parameterized models",
+      description:
+        "Some regions are replicated once per atom of a signature, so you choose how many copies (the scope) before simulating.",
+      models: filtered.filter((e) => e.params?.length),
+    },
+  ];
   return (
     <div className="model-library">
       {allowLocalModelPaths && (
@@ -63,32 +78,75 @@ export function ModelLibrary({
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      <div className="model-list">
-        {filtered.map((example) => (
-          <button
-            disabled={busy}
-            className="model-card"
-            key={example.path}
-            onClick={() => onOpen(example.path)}
+      {librarySections.map(({ title, description, models }) =>
+        models.length === 0 ? null : (
+          <section
+            className="library-section"
+            key={title}
+            aria-label={title}
           >
-            <span className="model-icon" aria-hidden="true">
-              ◇
-            </span>
-            <span>
-              <strong>{example.name}</strong>
-              <small>{example.group}</small>
-            </span>
-            <span aria-hidden="true">↗</span>
-          </button>
-        ))}
-        {!filtered.length && (
-          <p className="help">
-            {examples.length
-              ? "No matching models. Try a different search."
-              : "Examples are unavailable. Check the server status below, or enter a local path."}
-          </p>
-        )}
-      </div>
+            <header>
+              <h3>
+                {title} <span>{models.length}</span>
+              </h3>
+              <p className="help">{description}</p>
+            </header>
+            <div className="model-list">
+              {models.map((example) => (
+                <ModelCard
+                  busy={busy}
+                  example={example}
+                  key={example.path}
+                  onOpen={onOpen}
+                />
+              ))}
+            </div>
+          </section>
+        ),
+      )}
+      {!filtered.length && (
+        <p className="help">
+          {examples.length
+            ? "No matching models. Try a different search."
+            : "Examples are unavailable. Check the server status below, or enter a local path."}
+        </p>
+      )}
     </div>
+  );
+}
+
+function ModelCard({
+  busy,
+  example,
+  onOpen,
+}: {
+  busy: boolean;
+  example: ExampleModel;
+  onOpen: (path: string) => void;
+}) {
+  const params = example.params ?? [];
+  return (
+    <button
+      disabled={busy}
+      className="model-card"
+      onClick={() => onOpen(example.path)}
+    >
+      <span className="model-icon" aria-hidden="true">
+        ◇
+      </span>
+      <span>
+        <strong>{example.name}</strong>
+        <small>
+          {example.group}
+          {params.length > 0 && (
+            <span className="model-params">
+              {" "}
+              · per {params.join(", ")}
+            </span>
+          )}
+        </small>
+      </span>
+      <span aria-hidden="true">↗</span>
+    </button>
   );
 }

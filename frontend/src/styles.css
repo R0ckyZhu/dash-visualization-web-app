@@ -1732,6 +1732,36 @@ button, input, select, textarea { font-family: inherit; }
 .trace-table td.cell-hit, .trace-table tr.row-selected > td.cell-hit { background: #5a3526; color: #ffe0d6; outline: 1px solid #ff8a65; outline-offset: -1px; }
 .trace-help { margin: 4px 0 8px; }
 
+/* Example library: parameterized and non-parameterized models in separate sections. */
+.library-section { margin-bottom: 28px; }
+.library-section > header { margin-bottom: 12px; }
+.library-section h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.library-section h3 span { margin-left: 8px; color: #8fa7bc; font-size: 12px; font-weight: 400; }
+.library-section .help { margin: 4px 0 0; }
+.model-params { color: #9bd1fc; }
+
+/* Help page. */
+.header-actions button.active { background: #253b50; border-color: #5b829f; color: #bfe3ff; }
+.help-page { flex: 1; min-height: 0; overflow: auto; padding: 32px max(24px, calc((100% - 860px) / 2)) 48px; outline: none; }
+.help-inner { max-width: 860px; }
+.help-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.help-header h1 { margin: 0; font-size: clamp(26px, 3vw, 34px); font-weight: 600; letter-spacing: -.03em; }
+.help-lead { font-size: 15px; line-height: 1.7; color: var(--text-secondary); margin: 16px 0 20px; }
+.help-toc { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 20px; border-bottom: 1px solid #293544; }
+.help-toc button { height: 30px; font-size: 12px; padding: 0 10px; color: var(--text-secondary); }
+.help-page section { scroll-margin-top: 16px; }
+.help-page section > h2 { margin: 32px 0 10px; font-size: 20px; font-weight: 600; }
+.help-page h3 { margin: 22px 0 6px; font-size: 15px; font-weight: 600; color: #bfe3ff; }
+.help-page p, .help-page li, .help-page dd { font-size: 14px; line-height: 1.7; color: #c9d6e2; }
+.help-page ol, .help-page ul { padding-left: 22px; margin: 6px 0; }
+.help-page li + li { margin-top: 4px; }
+.help-page dl { margin: 8px 0; }
+.help-page dt { margin-top: 12px; font-weight: 600; color: #eef3f8; }
+.help-page dd { margin: 2px 0 0 16px; }
+.help-page dd ul { margin-top: 4px; }
+.help-page code { font: 13px "Cascadia Mono", Consolas, monospace; background: #17222e; border: 1px solid #2b3a4b; border-radius: 4px; padding: 0 4px; color: #d7e3ee; }
+.help-page b { color: #eef3f8; }
+
 /* Kripke view overlay: the current snapshot's events and variables over the graph. */
 .explore-tree { position: relative; }
 .kripke-overlay { position: absolute; top: 8px; right: 8px; z-index: 4; width: max-content; max-width: min(260px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 10px; background: #0f1923e6; border: 1px solid #36506a; border-radius: 8px; box-shadow: 0 6px 24px #0007; }
