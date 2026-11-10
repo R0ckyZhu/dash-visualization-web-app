@@ -1734,11 +1734,7 @@ button, input, select, textarea { font-family: inherit; }
 
 /* Example library: parameterized and non-parameterized models in separate sections. */
 .library-section { margin-bottom: 28px; }
-.library-section > header { margin-bottom: 12px; }
-.library-section h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.library-section h3 span { margin-left: 8px; color: #8fa7bc; font-size: 12px; font-weight: 400; }
-.library-section .help { margin: 4px 0 0; }
-.model-params { color: #9bd1fc; }
+.library-section h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
 
 /* Help page. */
 .header-actions button.active { background: #253b50; border-color: #5b829f; color: #bfe3ff; }

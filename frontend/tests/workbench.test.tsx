@@ -427,7 +427,6 @@ describe("library and help", () => {
     expect(within(plain).getByText("Test light")).toBeTruthy();
     expect(within(plain).queryByText("Test lift")).toBeNull();
     expect(within(parameterized).getByText("Test lift")).toBeTruthy();
-    expect(within(parameterized).getByText(/per PID/)).toBeTruthy();
   });
   it("opens help over a running simulation and returns to it", async () => {
     const user = await openAndStart();

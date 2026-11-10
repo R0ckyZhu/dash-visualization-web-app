@@ -99,8 +99,7 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
             <dd>
               Models that contain parameterized processes, shown in the
               statechart as <code>Elevator[PID_0]</code>,{" "}
-              <code>Elevator[PID_1]</code> and so on. The card names the
-              signature, such as “per PID”.
+              <code>Elevator[PID_1]</code> and so on.
             </dd>
           </dl>
         </section>
