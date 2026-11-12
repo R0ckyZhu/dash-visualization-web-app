@@ -204,8 +204,9 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
             </li>
             <li>
               <b>Show static model info</b> lists what stays fixed for the
-              whole trace: each signature with its atoms, constants such as{" "}
-              <code>Const.maxNbLoans = 7</code>, orderings the solver chose
+              whole trace: each signature with its atoms, fixed relations such
+              as farmer's <code>eats = Chicken-&gt;Grain, Fox-&gt;Chicken</code>,
+              orderings the solver chose
               (which need not follow the atom names, for example{" "}
               <code>Floor_2 &lt; Floor_0 &lt; Floor_1</code>), the integer range
               and the opened library modules. It is filled in once a
