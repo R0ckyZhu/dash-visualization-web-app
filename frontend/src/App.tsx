@@ -60,7 +60,7 @@ const viewLabels: Record<ViewName, string> = {
 const MODE = "simplified" as const;
 
 /** How many solver solutions to walk past before giving up on a new snapshot. */
-const ALT_ENUMERATION_LIMIT = 40;
+const ALT_ENUMERATION_LIMIT = 100;
 
 const PANEL_MIN = 300;
 const PANEL_MAX = 640;
