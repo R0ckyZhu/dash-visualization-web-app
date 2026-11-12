@@ -15,7 +15,7 @@ const VERTICAL_GAP = 140;
 const PARALLEL_EDGE_GAP = 44;
 const PARALLEL_LABEL_GAP = 24;
 
-export type StatechartSelection =
+export type HierarchySelection =
   | { kind: "state"; value: DashState }
   | { kind: "transition"; value: DashTransition };
 function shortName(id: string) {
@@ -205,7 +205,7 @@ function deterministicLayout(cy: Core) {
   });
 }
 
-export function StatechartGraph({
+export function HierarchyGraph({
   activeStateIds,
   children,
   hasSnapshot,
@@ -219,8 +219,8 @@ export function StatechartGraph({
   children?: ReactNode;
   hasSnapshot: boolean;
   model: DashModel;
-  onSelectionChange: (selection: StatechartSelection | null) => void;
-  selection: StatechartSelection | null;
+  onSelectionChange: (selection: HierarchySelection | null) => void;
+  selection: HierarchySelection | null;
   takenTransitionIds: string[];
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -296,7 +296,7 @@ export function StatechartGraph({
     if (!cy) return;
     const anchor = document.createElement("a");
     anchor.href = cy.png({ full: true, scale: 2, bg: "#0f1923" });
-    anchor.download = `${model.rootName || "statechart"}.png`;
+    anchor.download = `${model.rootName || "model-hierarchy"}.png`;
     anchor.click();
   }
 
@@ -526,8 +526,8 @@ export function StatechartGraph({
   }, [model, selection]);
 
   return (
-    <div className="statechart-component">
-      <div className="graph-controls" aria-label="Statechart controls">
+    <div className="hierarchy-graph">
+      <div className="graph-controls" aria-label="Model hierarchy controls">
         <button onClick={fitGraph} type="button">Fit</button>
         <button
           aria-label="Zoom in"
@@ -553,11 +553,11 @@ export function StatechartGraph({
         >
           -
         </button>
-        <button onClick={exportGraph} title="Export the statechart as an image" type="button">Export PNG</button>
+        <button onClick={exportGraph} title="Export the model hierarchy as an image" type="button">Export PNG</button>
         {children && <div className="graph-controls-end">{children}</div>}
       </div>
-      <div className="statechart-graph-shell">
-        <div className="statechart-canvas" ref={containerRef} />
+      <div className="hierarchy-graph-shell">
+        <div className="hierarchy-canvas" ref={containerRef} />
       </div>
     </div>
   );

@@ -679,7 +679,7 @@ input {
   font-size: 17px;
 }
 
-.statechart-component {
+.hierarchy-graph {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -720,13 +720,13 @@ button.toggle-off {
   color: #fff;
 }
 
-.statechart-graph-shell {
+.hierarchy-graph-shell {
   flex: 1;
   min-height: 0;
   position: relative;
 }
 
-.statechart-canvas {
+.hierarchy-canvas {
   height: 100%;
   width: 100%;
 }
@@ -1765,9 +1765,9 @@ button, input, select, textarea { font-family: inherit; }
 .kripke-overlay .variable-chip { justify-content: space-between; }
 .kripke-overlay .variable-value { overflow-wrap: anywhere; text-align: right; }
 
-/* Hierarchy view: the statechart with a static-details column beside it. */
+/* Hierarchy view: the model hierarchy graph with a static-details column beside it. */
 .hierarchy-body { display: flex; flex: 1; min-height: 0; }
-.hierarchy-body > .statechart-component { min-width: 0; }
+.hierarchy-body > .hierarchy-graph { min-width: 0; }
 .hierarchy-inspector { width: 300px; flex: none; overflow: auto; border-left: 1px solid #263b4f; background: #121c27; }
 .graph-controls-end { margin-left: auto; display: flex; gap: 6px; }
 .selection-details dd pre { margin: 0; padding: 0; background: transparent; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; }
@@ -1788,7 +1788,7 @@ button, input, select, textarea { font-family: inherit; }
 @media (min-width: 1000px) { .source-tools { display: none; } }
 @media (max-width: 1199px) {
   .hierarchy-body { flex-direction: column; }
-  .hierarchy-body > .statechart-component { min-height: 360px; }
+  .hierarchy-body > .hierarchy-graph { min-height: 360px; }
   .hierarchy-inspector { width: auto; max-height: 42%; border-left: 0; border-top: 1px solid #263b4f; }
 }
 

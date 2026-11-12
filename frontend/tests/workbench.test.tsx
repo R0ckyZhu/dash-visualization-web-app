@@ -12,8 +12,8 @@ import { ScopeDialog } from "../src/components/ScopeDialog";
 import { valuesChanged } from "../src/state/valueComparison";
 import { dashApi } from "../src/api/dashApi";
 
-vi.mock("../src/graph/StatechartGraph", () => ({
-  StatechartGraph: ({
+vi.mock("../src/graph/HierarchyGraph", () => ({
+  HierarchyGraph: ({
     activeStateIds,
     children,
   }: {

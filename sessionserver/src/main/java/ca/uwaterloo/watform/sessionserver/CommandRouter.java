@@ -80,7 +80,6 @@ public class CommandRouter {
     private Map<String, Integer> currentSigScopes; // e.g., {PID: 2, Floor: 3}
     private Map<String, Integer> fieldArities; // field name → value arity (excl. snapshot)
     private Map<String, Integer> snapshotFieldDeclaredArities = Collections.emptyMap();
-    private Set<String> environmentInputFields = Collections.emptySet();
     private A4Solution currentA4Solution;
     private A4Solution initA4Solution; // kept separate so Alt Init always enumerates from init
     private String currentA4SeedCode;
@@ -529,7 +528,6 @@ public class CommandRouter {
         currentAlloyModel = new DashToAlloy(currentModel, opt).translate();
         deleteStaleGeneratedAlloyFile(currentAlloyModel.fullFileName);
         snapshotFieldDeclaredArities = extractSnapshotFieldArities(currentAlloyModel.toString());
-        environmentInputFields = detectEnvironmentInputFields(currentModel);
         clearSimulationState();
 
         int cmdCount = currentAlloyModel.getNumCmds();
@@ -609,9 +607,11 @@ public class CommandRouter {
     /**
      * Step from a given state — origin/master logic restored, with sig-scope plumbing kept.
      *
-     * <p>Builds a custom {@code __initial} pred that pins the supplied snapshot fields while leaving
-     * environment-owned inputs free for the solver. Numbered conf/taken/event fields are preserved
-     * at the depth emitted by the translator.
+     * <p>Pins every field of the supplied snapshot, environment inputs included: guards read the
+     * starting snapshot's inputs, and Dash+ keeps inputs fixed within a big step, so re-choosing
+     * them would step from a snapshot other than the one shown. The successor's inputs stay free
+     * wherever the translation allows. Numbered conf/taken/event fields are preserved at the depth
+     * emitted by the translator.
      * Iterates the snapshot scope from 2 upward until a satisfying assignment is found, then
      * returns it.
      *
@@ -1338,9 +1338,6 @@ public class CommandRouter {
 
         for (Map.Entry<String, JsonElement> entry : state.entrySet()) {
             String fieldName = entry.getKey();
-            if (environmentInputFields.contains(fieldName)) {
-                continue;
-            }
             JsonArray values = entry.getValue().getAsJsonArray();
             int arity =
                     snapshotFieldDeclaredArities.getOrDefault(
@@ -1408,19 +1405,6 @@ public class CommandRouter {
             arities.put(fieldName, arity);
         }
         return Collections.unmodifiableMap(arities);
-    }
-
-    private Set<String> detectEnvironmentInputFields(DashModel model) {
-        if (model == null) {
-            return Collections.emptySet();
-        }
-        Set<String> fields = new java.util.LinkedHashSet<>();
-        for (String varName : model.allVarNames()) {
-            if (model.varKind(varName) != null && "ENV".equals(model.varKind(varName).name())) {
-                fields.add(varName.replace('/', '_'));
-            }
-        }
-        return Collections.unmodifiableSet(fields);
     }
 
     /**

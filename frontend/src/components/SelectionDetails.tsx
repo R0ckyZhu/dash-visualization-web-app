@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { DashModel } from "../api/types";
-import type { StatechartSelection } from "../graph/StatechartGraph";
+import type { HierarchySelection } from "../graph/HierarchyGraph";
 import {
   displaySnapshotField,
   formatSnapshotValues,
@@ -10,7 +10,7 @@ import {
 import type { StateTreeNode } from "../state/stateTree";
 
 export type DetailSelection =
-  | StatechartSelection
+  | HierarchySelection
   | { kind: "snapshot"; value: StateTreeNode }
   | null;
 
@@ -39,7 +39,7 @@ export function ModelElementDetails({
   selection,
 }: {
   onClose: () => void;
-  selection: StatechartSelection | null;
+  selection: HierarchySelection | null;
 }) {
   if (!selection) return null;
   const title = selection.kind === "state" ? "State info" : "Transition info";

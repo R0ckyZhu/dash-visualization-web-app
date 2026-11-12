@@ -87,6 +87,14 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
               there.
             </li>
           </ol>
+          <p>
+            A good first model is <b>bit-counter</b> in the 2019 · dash-website
+            collection. It is small but has nested and concurrent states,
+            environment and internal events, and big steps with unstable
+            snapshots. Then try <b>elevator</b> under Local models, which adds
+            parameterized processes, variables, and an ordering you can see
+            with <b>Show static model info</b>.
+          </p>
         </section>
 
         <section id="help-library">
@@ -94,11 +102,13 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
           <p>The bundled case studies are listed in two groups:</p>
           <dl>
             <dt>Non-parameterized models</dt>
-            <dd>Every state and region of the statechart exists exactly once.</dd>
+            <dd>
+              Every state and region of the model hierarchy exists exactly once.
+            </dd>
             <dt>Parameterized models</dt>
             <dd>
-              Models that contain parameterized processes, shown in the
-              statechart as <code>Elevator[PID_0]</code>,{" "}
+              Models that contain parameterized processes, shown in the model
+              hierarchy as <code>Elevator[PID_0]</code>,{" "}
               <code>Elevator[PID_1]</code> and so on.
             </dd>
           </dl>
@@ -107,11 +117,11 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
         <section id="help-scopes">
           <h2>Scopes</h2>
           <p>
-            A scope says exactly how many atoms a signature has. With{" "}
-            <code>Floor</code> at 3, the atoms <code>Floor_0</code>,{" "}
-            <code>Floor_1</code> and <code>Floor_2</code> exist for the whole
-            simulation. For a parameterized model, the scope of its signature is
-            the number of copies of the parameterized region.
+            DashViz uses exact scopes: with <code>Floor</code> at 3, the atoms{" "}
+            <code>Floor_0</code>, <code>Floor_1</code> and <code>Floor_2</code>{" "}
+            all exist, for the whole simulation. For a parameterized model, the
+            scope of its signature is the number of copies of the parameterized
+            process.
           </p>
           <p>
             Some models only have an initial snapshot at particular scopes. The
@@ -129,9 +139,17 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
             <dd>Ask the solver for a fresh initial snapshot and clear the run.</dd>
             <dt>Step →</dt>
             <dd>
-              Find one successor of the current snapshot. The app always
-              simulates in <em>simplified mode</em>: the solver prefers
-              successors from which the simulation can continue.
+              Find a successor of the current snapshot by taking enabled
+              transitions. If some successor can itself take a transition, Step
+              returns one of those; otherwise it returns a dead end, a successor
+              where nothing is enabled.
+              <br />
+              When no transition is enabled in the current snapshot, the system
+              stutters: the successor keeps the same active states and variable
+              values and takes no transition, though the environment may supply
+              new inputs. A successor identical to the current snapshot appears
+              in the Kripke structure as a self-loop. If no successor exists at
+              all, the status bar says so.
             </dd>
             <dt>Alternatives</dt>
             <dd>
@@ -171,7 +189,7 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
           <h3>Static Model Hierarchy</h3>
           <ul>
             <li>
-              The statechart of the model. Nested boxes show the state
+              The model's states and transitions. Nested boxes show the state
               hierarchy; concurrent regions have solid borders and
               exclusive-choice regions dashed ones. Default states are orange.
             </li>
@@ -195,8 +213,8 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
             </li>
             <li>
               <b>Fit</b>, <b>+</b> and <b>−</b> adjust the view; drag to pan
-              and scroll to zoom. <b>Export PNG</b> saves the statechart as an
-              image.
+              and scroll to zoom. <b>Export PNG</b> saves the model hierarchy
+              as an image.
             </li>
           </ul>
 
@@ -289,13 +307,15 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
             <dt>Environment inputs</dt>
             <dd>
               Variables declared <code>env</code> and environment events are
-              chosen by the environment. The solver picks their values freely
-              at each step.
+              chosen by the environment. It can pick new values whenever a
+              stable snapshot is reached; during a big step they stay
+              unchanged. Each step uses the inputs of the snapshot it starts
+              from.
             </dd>
             <dt>Static and dynamic</dt>
             <dd>
-              Static information (atoms, constants, orderings, the statechart
-              itself) is the same in every snapshot of a trace. Dynamic
+              Static information (atoms, constants, orderings, the model
+              hierarchy itself) is the same in every snapshot of a trace. Dynamic
               information (active states, variables, events, transitions taken)
               can differ from one snapshot to the next.
             </dd>
@@ -317,11 +337,6 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
             <li>
               Tabs in the same browser share one session. Use another browser
               or a private window for an independent simulation.
-            </li>
-            <li>
-              When stepping, the solver may choose new environment-input values
-              for the snapshot you step from, so the inputs shown for a
-              snapshot are not always the ones its next step used.
             </li>
           </ul>
         </section>

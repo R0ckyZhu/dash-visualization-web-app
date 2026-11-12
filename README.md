@@ -1,7 +1,7 @@
 # Dash Visualizer
 
 Dash Visualizer is a local web application for loading, inspecting, and
-interactively simulating Dash statechart models. The active UI is written in
+interactively simulating Dash+ models. The active UI is written in
 React and TypeScript, FastAPI owns the browser API and session context, and a
 Java session server runs the Dash+/Alloy parser, translator, and solver.
 
@@ -11,7 +11,7 @@ Java session server runs the Dash+/Alloy parser, translator, and solver.
 - Configure scopes for parameterized models.
 - Start a simulation and explore it with Step and the Alternatives menu.
 - Apply state, event, variable, transition, and custom Alloy constraints.
-- Inspect hierarchical statecharts, active-state overlays, and parallel edges.
+- Inspect the model hierarchy, with active states and parallel edges.
 - Navigate a persistent state tree with stability coloring and selection details.
 - Compare events and variables across the current trace.
 - Inspect Dash source, translated Alloy, and generated solver fragments.

@@ -24,7 +24,7 @@ import { TraceTable } from "./components/TraceTable";
 import { type DetailSelection } from "./components/SelectionDetails";
 import { ScopeDialog } from "./components/ScopeDialog";
 import { SplitButton } from "./components/SplitButton";
-import { StatechartGraph } from "./graph/StatechartGraph";
+import { HierarchyGraph } from "./graph/HierarchyGraph";
 import { expandParameterizedModel } from "./state/modelExpansion";
 import {
   createInitialStateTree,
@@ -704,7 +704,7 @@ export function App() {
                   </span>
                 </div>
                 <div className="hierarchy-body">
-                  <StatechartGraph
+                  <HierarchyGraph
                     model={visualModel ?? session.model}
                     activeStateIds={currentSnapshot?.activeStates ?? []}
                     hasSnapshot={!!currentSnapshot}
@@ -722,7 +722,7 @@ export function App() {
                         ? "Hide static model info"
                         : "Show static model info"}
                     </button>
-                  </StatechartGraph>
+                  </HierarchyGraph>
                   <HierarchyInspector
                     model={visualModel ?? session.model}
                     onSelection={setDetailSelection}

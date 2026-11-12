@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { DashModel, StaticInfoResponse } from "../api/types";
-import type { StatechartSelection } from "../graph/StatechartGraph";
+import type { HierarchySelection } from "../graph/HierarchyGraph";
 import { ModelElementDetails } from "./SelectionDetails";
 
 function sigKind(modifiers: string, atoms: string[]) {
@@ -114,9 +114,9 @@ export function HierarchyInspector({
   staticInfo,
 }: {
   model: DashModel;
-  onSelection: (selection: StatechartSelection | null) => void;
+  onSelection: (selection: HierarchySelection | null) => void;
   scopes: Record<string, number>;
-  selection: StatechartSelection | null;
+  selection: HierarchySelection | null;
   showStatic: boolean;
   staticInfo: StaticInfoResponse | null;
 }) {
